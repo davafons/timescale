@@ -11,6 +11,7 @@ struct ProgressPopover: View {
   @AppStorage(SettingsKey.lifeExpectancy) private var lifeExpectancy = 84.0
   @AppStorage(SettingsKey.showDay) private var showDay = true
   @AppStorage(SettingsKey.showWeek) private var showWeek = true
+  @AppStorage(SettingsKey.weekStartsOn) private var weekStartsOn = WeekStartChoice.monday.rawValue
   @AppStorage(SettingsKey.showMonth) private var showMonth = true
   @AppStorage(SettingsKey.showQuarter) private var showQuarter = true
   @AppStorage(SettingsKey.quarterCycle) private var quarterCycleRawValue =
@@ -22,6 +23,9 @@ struct ProgressPopover: View {
   @AppStorage(SettingsKey.accent) private var accentRawValue = AccentChoice.system.rawValue
   @AppStorage(SettingsKey.dayStartMinutes) private var dayStartMinutes = 8 * 60
   @AppStorage(SettingsKey.dayEndMinutes) private var dayEndMinutes = 23 * 60
+  @AppStorage(SettingsKey.routineName) private var routineName = "Work"
+  @AppStorage(SettingsKey.routineDurationMinutes) private var routineDurationMinutes = 8 * 60
+  @AppStorage(SettingsKey.routineStartedTimestamp) private var routineStartedTimestamp = 0.0
   @AppStorage(SettingsKey.showSolarEvents) private var showSolarEvents = true
   @AppStorage(SettingsKey.locationConfigured) private var locationConfigured = false
   @AppStorage(SettingsKey.latitude) private var latitude = 0.0
@@ -31,20 +35,30 @@ struct ProgressPopover: View {
     AccentChoice(rawValue: accentRawValue)?.color ?? .accentColor
   }
 
+  private var weekCalendar: Calendar {
+    var calendar = Calendar.autoupdatingCurrent
+    let choice = WeekStartChoice(rawValue: weekStartsOn) ?? .monday
+    calendar.firstWeekday = choice.firstWeekday
+    calendar.minimumDaysInFirstWeek = choice == .monday ? 4 : 1
+    return calendar
+  }
+
   var body: some View {
     TimelineView(.periodic(from: .now, by: 30)) { context in
       VStack(alignment: .leading, spacing: LayoutScale.xLarge) {
         header(date: context.date)
 
         VStack(spacing: LayoutScale.xLarge) {
+          routineRow(at: context.date)
           if showDay {
             dayRow(at: context.date)
           }
           if showWeek {
+            let calendar = weekCalendar
             ProgressRow(
               title:
-                "Week \(Calendar.autoupdatingCurrent.component(.weekOfYear, from: context.date))",
-              progress: ProgressCalculator.week(at: context.date),
+                "Week \(calendar.component(.weekOfYear, from: context.date))",
+              progress: ProgressCalculator.week(at: context.date, calendar: calendar),
               period: .week,
               showRemaining: showRemaining,
               precision: precision,
@@ -114,6 +128,62 @@ struct ProgressPopover: View {
       .padding(LayoutScale.xLarge)
       .frame(width: LayoutScale.popoverWidth)
     }
+  }
+
+  @ViewBuilder
+  private func routineRow(at date: Date) -> some View {
+    let name =
+      routineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? "Work" : routineName
+    let duration = TimeInterval(max(routineDurationMinutes, 1) * 60)
+    if routineStartedTimestamp > 0 {
+      let start = Date(timeIntervalSince1970: routineStartedTimestamp)
+      let end = start.addingTimeInterval(duration)
+      let elapsed = min(max(date.timeIntervalSince(start) / duration, 0), 1)
+      VStack(alignment: .leading, spacing: LayoutScale.small) {
+        ProgressRow(
+          title: name,
+          progress: TimeProgress(elapsed: elapsed, start: start, end: end),
+          period: .day,
+          showRemaining: false,
+          precision: precision,
+          accent: accent,
+          rangeStart: start,
+          rangeEnd: end
+        )
+        HStack {
+          Spacer()
+          Button(elapsed >= 1 ? "Restart" : "Stop") {
+            routineStartedTimestamp = elapsed >= 1 ? Date().timeIntervalSince1970 : 0
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(.secondary)
+          .font(TypographyScale.action)
+        }
+      }
+    } else {
+      Button {
+        routineStartedTimestamp = Date().timeIntervalSince1970
+      } label: {
+        HStack {
+          Label("Start \(name)", systemImage: "play.fill")
+          Spacer()
+          Text(routineDurationLabel)
+            .foregroundStyle(.secondary)
+        }
+      }
+      .buttonStyle(.plain)
+      .font(TypographyScale.action)
+    }
+  }
+
+  private var routineDurationLabel: String {
+    let minutes = max(routineDurationMinutes, 1)
+    let hours = minutes / 60
+    let remainder = minutes % 60
+    if hours == 0 { return "\(remainder) min" }
+    if remainder == 0 { return "\(hours) hr" }
+    return "\(hours) hr \(remainder) min"
   }
 
   @ViewBuilder

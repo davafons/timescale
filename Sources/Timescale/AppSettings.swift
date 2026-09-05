@@ -33,6 +33,14 @@ enum QuarterCycle: String, CaseIterable, Identifiable {
   }
 }
 
+enum WeekStartChoice: String, CaseIterable, Identifiable {
+  case monday, sunday
+
+  var id: String { rawValue }
+  var title: String { rawValue.capitalized }
+  var firstWeekday: Int { self == .monday ? 2 : 1 }
+}
+
 enum Country: String, CaseIterable, Identifiable {
   case australia = "Australia"
   case canada = "Canada"
@@ -69,6 +77,7 @@ enum SettingsKey {
   static let lifeExpectancy = "lifeExpectancy"
   static let showDay = "showDay"
   static let showWeek = "showWeek"
+  static let weekStartsOn = "weekStartsOn"
   static let showMonth = "showMonth"
   static let showQuarter = "showQuarter"
   static let quarterCycle = "quarterCycle"
@@ -79,6 +88,9 @@ enum SettingsKey {
   static let accent = "accent"
   static let dayStartMinutes = "dayStartMinutes"
   static let dayEndMinutes = "dayEndMinutes"
+  static let routineName = "routineName"
+  static let routineDurationMinutes = "routineDurationMinutes"
+  static let routineStartedTimestamp = "routineStartedTimestamp"
   static let showSolarEvents = "showSolarEvents"
   static let locationConfigured = "locationConfigured"
   static let latitude = "latitude"

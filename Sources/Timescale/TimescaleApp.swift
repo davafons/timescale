@@ -10,6 +10,8 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
   private let popover = NSPopover()
   private var updateTimer: Timer?
   private var defaultsObserver: NSObjectProtocol?
+  private let sharedSettings = SharedSettingsCoordinator()
+  private let locationProvider = LocationProvider()
 
   static func main() {
     let application = NSApplication.shared
@@ -21,6 +23,7 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     NSApplication.shared.setActivationPolicy(.accessory)
     registerDefaults()
     migrateLegacySettings()
+    sharedSettings.start()
     configurePopover()
     configureStatusItem()
     updatePercentage()
@@ -51,8 +54,16 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     return true
   }
 
+  func application(_ application: NSApplication, open urls: [URL]) {
+    guard urls.contains(where: { $0.scheme == "timescale" && $0.host == "locate" }) else {
+      return
+    }
+    requestCurrentLocation()
+  }
+
   func applicationWillTerminate(_ notification: Notification) {
     updateTimer?.invalidate()
+    sharedSettings.stop()
     if let defaultsObserver {
       NotificationCenter.default.removeObserver(defaultsObserver)
     }
@@ -121,6 +132,15 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     statusItem.button?.setAccessibilityValue("\(percentage) of waking day elapsed")
   }
 
+  private func requestCurrentLocation() {
+    locationProvider.requestLocation { coordinate in
+      let defaults = UserDefaults.standard
+      defaults.set(coordinate.latitude, forKey: SettingsKey.latitude)
+      defaults.set(coordinate.longitude, forKey: SettingsKey.longitude)
+      defaults.set(true, forKey: SettingsKey.locationConfigured)
+    }
+  }
+
   private func registerDefaults() {
     UserDefaults.standard.register(defaults: [
       SettingsKey.birthTimestamp: DateComponents(calendar: .current, year: 1990, month: 1, day: 1)
@@ -133,6 +153,7 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
       SettingsKey.lifeExpectancy: Country.japan.lifeExpectancy,
       SettingsKey.showDay: true,
       SettingsKey.showWeek: true,
+      SettingsKey.weekStartsOn: WeekStartChoice.monday.rawValue,
       SettingsKey.showMonth: true,
       SettingsKey.showQuarter: true,
       SettingsKey.quarterCycle: QuarterCycle.calendar.rawValue,
@@ -143,6 +164,9 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
       SettingsKey.accent: AccentChoice.system.rawValue,
       SettingsKey.dayStartMinutes: 8 * 60,
       SettingsKey.dayEndMinutes: 23 * 60,
+      SettingsKey.routineName: "Work",
+      SettingsKey.routineDurationMinutes: 8 * 60,
+      SettingsKey.routineStartedTimestamp: 0.0,
       SettingsKey.showSolarEvents: true,
       SettingsKey.locationConfigured: false,
       SettingsKey.latitude: 0.0,

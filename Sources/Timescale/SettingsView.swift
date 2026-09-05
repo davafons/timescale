@@ -12,6 +12,7 @@ struct SettingsView: View {
   @AppStorage(SettingsKey.lifeExpectancy) private var lifeExpectancy = 84.0
   @AppStorage(SettingsKey.showDay) private var showDay = true
   @AppStorage(SettingsKey.showWeek) private var showWeek = true
+  @AppStorage(SettingsKey.weekStartsOn) private var weekStartsOn = WeekStartChoice.monday.rawValue
   @AppStorage(SettingsKey.showMonth) private var showMonth = true
   @AppStorage(SettingsKey.showQuarter) private var showQuarter = true
   @AppStorage(SettingsKey.quarterCycle) private var quarterCycleRawValue =
@@ -23,6 +24,8 @@ struct SettingsView: View {
   @AppStorage(SettingsKey.accent) private var accentRawValue = AccentChoice.system.rawValue
   @AppStorage(SettingsKey.dayStartMinutes) private var dayStartMinutes = 8 * 60
   @AppStorage(SettingsKey.dayEndMinutes) private var dayEndMinutes = 23 * 60
+  @AppStorage(SettingsKey.routineName) private var routineName = "Work"
+  @AppStorage(SettingsKey.routineDurationMinutes) private var routineDurationMinutes = 8 * 60
   @AppStorage(SettingsKey.showSolarEvents) private var showSolarEvents = true
   @AppStorage(SettingsKey.locationConfigured) private var locationConfigured = false
   @AppStorage(SettingsKey.latitude) private var latitude = 0.0
@@ -60,112 +63,168 @@ struct SettingsView: View {
     )
   }
 
+  private var routineHoursBinding: Binding<Double> {
+    Binding(
+      get: { Double(routineDurationMinutes) / 60 },
+      set: { routineDurationMinutes = min(max(Int(($0 * 60).rounded()), 1), 10_080) }
+    )
+  }
+
   var body: some View {
     Form {
       Section("Visible progress") {
-        Toggle("Day", isOn: $showDay)
-        Toggle("Week", isOn: $showWeek)
-        Toggle("Month", isOn: $showMonth)
-        Toggle("Quarter", isOn: $showQuarter)
-        if showQuarter {
-          Picker("Quarter cycle", selection: $quarterCycleRawValue) {
-            ForEach(QuarterCycle.allCases) { cycle in
-              Text(cycle.title).tag(cycle.rawValue)
+        Group {
+          Toggle("Day", isOn: $showDay)
+          Toggle("Week", isOn: $showWeek)
+          if showWeek {
+            Picker("Week starts on", selection: $weekStartsOn) {
+              ForEach(WeekStartChoice.allCases) { choice in
+                Text(choice.title).tag(choice.rawValue)
+              }
             }
           }
+          Toggle("Month", isOn: $showMonth)
+          Toggle("Quarter", isOn: $showQuarter)
+          if showQuarter {
+            Picker("Quarter cycle", selection: $quarterCycleRawValue) {
+              ForEach(QuarterCycle.allCases) { cycle in
+                Text(cycle.title).tag(cycle.rawValue)
+              }
+            }
+          }
+          Toggle("Year", isOn: $showYear)
+          Toggle("Life estimate", isOn: $showLife)
         }
-        Toggle("Year", isOn: $showYear)
-        Toggle("Life estimate", isOn: $showLife)
+        .settingsRowInset()
       }
 
       Section("Waking day") {
-        DatePicker(
-          "Starts", selection: timeBinding($dayStartMinutes), displayedComponents: .hourAndMinute)
-        DatePicker(
-          "Ends", selection: timeBinding($dayEndMinutes), displayedComponents: .hourAndMinute)
-        Text(
-          "Day progress is 0% at your start time and 100% at your end time. Overnight schedules are supported."
-        )
-        .font(TypographyScale.detail)
-        .foregroundStyle(.secondary)
-      }
-
-      Section("Sun") {
-        Toggle("Show sunrise and sunset", isOn: $showSolarEvents)
-        Button(locationConfigured ? "Update Current Location" : "Use Current Location") {
-          locationProvider.requestLocation { coordinate in
-            latitude = coordinate.latitude
-            longitude = coordinate.longitude
-            locationConfigured = true
-          }
-        }
-        .disabled(locationProvider.isRequesting)
-        if let message = locationProvider.message {
-          Text(message).font(TypographyScale.detail).foregroundStyle(.secondary)
-        } else if locationConfigured {
+        Group {
+          DatePicker(
+            "Starts", selection: timeBinding($dayStartMinutes), displayedComponents: .hourAndMinute)
+          DatePicker(
+            "Ends", selection: timeBinding($dayEndMinutes), displayedComponents: .hourAndMinute)
           Text(
-            "Location saved locally: \(latitude.formatted(.number.precision(.fractionLength(2))))°, \(longitude.formatted(.number.precision(.fractionLength(2))))°"
+            "Day progress is 0% at your start time and 100% at your end time. Overnight schedules are supported."
           )
           .font(TypographyScale.detail)
           .foregroundStyle(.secondary)
         }
+        .settingsRowInset()
+      }
+
+      Section("Routine") {
+        Group {
+          TextField("Name", text: $routineName)
+            .onSubmit {
+              if routineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                routineName = "Work"
+              }
+            }
+          HStack {
+            Text("Duration")
+            Spacer()
+            TextField(
+              "8", value: routineHoursBinding, format: .number.precision(.fractionLength(0...2))
+            )
+            .multilineTextAlignment(.trailing)
+            .frame(width: 70)
+            Text("hours").foregroundStyle(.secondary)
+          }
+          Text("Start it from the menu-bar popover. Its progress is shared with the terminal.")
+            .font(TypographyScale.detail)
+            .foregroundStyle(.secondary)
+        }
+        .settingsRowInset()
+      }
+
+      Section("Sun") {
+        Group {
+          Toggle("Show sunrise and sunset", isOn: $showSolarEvents)
+          Button(locationConfigured ? "Update Current Location" : "Use Current Location") {
+            locationProvider.requestLocation { coordinate in
+              latitude = coordinate.latitude
+              longitude = coordinate.longitude
+              locationConfigured = true
+            }
+          }
+          .disabled(locationProvider.isRequesting)
+          if let message = locationProvider.message {
+            Text(message).font(TypographyScale.detail).foregroundStyle(.secondary)
+          } else if locationConfigured {
+            Text(
+              "Location saved locally: \(latitude.formatted(.number.precision(.fractionLength(2))))°, \(longitude.formatted(.number.precision(.fractionLength(2))))°"
+            )
+            .font(TypographyScale.detail)
+            .foregroundStyle(.secondary)
+          }
+        }
+        .settingsRowInset()
       }
 
       Section("Life estimate") {
-        DatePicker("Birth date", selection: birthDate, in: ...Date(), displayedComponents: .date)
-        if !birthDateConfigured {
-          Button("Use This Birth Date") {
-            birthDate.wrappedValue = birthDate.wrappedValue
+        Group {
+          DatePicker("Birth date", selection: birthDate, in: ...Date(), displayedComponents: .date)
+          if !birthDateConfigured {
+            Button("Use This Birth Date") {
+              birthDate.wrappedValue = birthDate.wrappedValue
+            }
           }
-        }
 
-        Picker("Country", selection: $countryRawValue) {
-          ForEach(Country.allCases) { country in
-            Text(country.rawValue).tag(country.rawValue)
+          Picker("Country", selection: $countryRawValue) {
+            ForEach(Country.allCases) { country in
+              Text(country.rawValue).tag(country.rawValue)
+            }
           }
-        }
-        .onChange(of: countryRawValue) { _, newValue in
-          if let country = Country(rawValue: newValue) {
-            lifeExpectancy = country.lifeExpectancy
+          .onChange(of: countryRawValue) { _, newValue in
+            if let country = Country(rawValue: newValue) {
+              lifeExpectancy = country.lifeExpectancy
+            }
           }
-        }
 
-        HStack {
-          Text("Life expectancy")
-          Spacer()
-          TextField(
-            "Years", value: lifeExpectancyBinding, format: .number.precision(.fractionLength(0...1))
+          HStack {
+            Text("Life expectancy")
+            Spacer()
+            TextField(
+              "Years", value: lifeExpectancyBinding,
+              format: .number.precision(.fractionLength(0...1))
+            )
+            .multilineTextAlignment(.trailing)
+            .frame(width: 70)
+            Text("years").foregroundStyle(.secondary)
+          }
+
+          Text(
+            "Rounded 2024 World Bank life expectancy at birth. This is a population average, not a personal or medical prediction. You can edit it directly."
           )
-          .multilineTextAlignment(.trailing)
-          .frame(width: 70)
-          Text("years").foregroundStyle(.secondary)
+          .font(TypographyScale.detail)
+          .foregroundStyle(.secondary)
         }
-
-        Text(
-          "Rounded 2024 World Bank life expectancy at birth. This is a population average, not a personal or medical prediction. You can edit it directly."
-        )
-        .font(TypographyScale.detail)
-        .foregroundStyle(.secondary)
+        .settingsRowInset()
       }
 
       Section("Appearance") {
-        Picker("Display", selection: $showRemaining) {
-          Text("Elapsed").tag(false)
-          Text("Remaining").tag(true)
-        }
-        .pickerStyle(.segmented)
+        Group {
+          Picker("Display", selection: $showRemaining) {
+            Text("Elapsed").tag(false)
+            Text("Remaining").tag(true)
+          }
+          .pickerStyle(.segmented)
 
-        Picker("Decimal places", selection: $precision) {
-          Text("0").tag(0)
-          Text("1").tag(1)
-          Text("2").tag(2)
-        }
+          Picker("Decimal places", selection: $precision) {
+            Text("0").tag(0)
+            Text("1").tag(1)
+            Text("2").tag(2)
+            Text("3").tag(3)
+          }
 
-        Picker("Accent", selection: $accentRawValue) {
-          ForEach(AccentChoice.allCases) { choice in
-            Text(choice.title).tag(choice.rawValue)
+          Picker("Accent", selection: $accentRawValue) {
+            ForEach(AccentChoice.allCases) { choice in
+              Text(choice.title).tag(choice.rawValue)
+            }
           }
         }
+        .settingsRowInset()
       }
 
       Text("All settings stay on this Mac.")
@@ -191,5 +250,12 @@ struct SettingsView: View {
         minutes.wrappedValue = (components.hour ?? 0) * 60 + (components.minute ?? 0)
       }
     )
+  }
+}
+
+private extension View {
+  func settingsRowInset() -> some View {
+    padding(.horizontal, LayoutScale.small)
+      .padding(.vertical, LayoutScale.xSmall)
   }
 }
