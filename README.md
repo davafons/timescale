@@ -69,6 +69,8 @@ Country defaults are rounded from the World Bank's 2024 [life expectancy at birt
 
 ```sh
 make dev       # rebuild, reinstall, and relaunch when files change
+make format    # format Swift sources in place
+make lint      # check Swift formatting and shell scripts
 make test      # run calculation tests
 make build     # create build/Timescale.app
 make package   # create a universal DMG, ZIP, and checksums in dist/

@@ -19,6 +19,10 @@ jobs:
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: '6.0'
+      - name: Install ShellCheck
+        run: brew install shellcheck
+      - name: Lint
+        run: make lint
       - name: Validate release version
         run: |
           version="${GITHUB_REF_NAME#v}"
