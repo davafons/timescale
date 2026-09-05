@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="620" viewBox="0 0 900 620" role="img" aria-labelledby="title desc">
+  <title id="title">Timescale terminal interface</title>
+  <desc id="desc">A terminal window showing Timescale progress bars for the day, week, month, quarter, and year.</desc>
+  <rect width="900" height="620" rx="18" fill="#17191d"/>
+  <rect width="900" height="42" rx="18" fill="#262a31"/>
+  <rect y="24" width="900" height="18" fill="#262a31"/>
+  <circle cx="24" cy="21" r="7" fill="#ff5f57"/>
+  <circle cx="48" cy="21" r="7" fill="#febc2e"/>
+  <circle cx="72" cy="21" r="7" fill="#28c840"/>
+  <text x="450" y="26" text-anchor="middle" fill="#a8adb7" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">timescale</text>
+  <text x="42" y="86" fill="#e8eaf0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="700">Timescale · Saturday, Sep 5</text>
+  <text x="42" y="120" fill="#8f96a3" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">q quit   r reload   e edit settings</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20">
+    <text x="42" y="178" fill="#e8eaf0">Day</text><text x="220" y="178" fill="#cdd2dc">99.4%</text><text x="390" y="178" fill="#8f96a3">5.6 min left</text>
+    <text x="42" y="248" fill="#e8eaf0">Week 36</text><text x="220" y="248" fill="#cdd2dc">85.1%</text><text x="390" y="248" fill="#8f96a3">25h 6m left</text>
+    <text x="42" y="318" fill="#e8eaf0">September</text><text x="220" y="318" fill="#cdd2dc">16.5%</text><text x="390" y="318" fill="#8f96a3">25.0 days left</text>
+    <text x="42" y="388" fill="#e8eaf0">Quarter Q3</text><text x="220" y="388" fill="#cdd2dc">72.8%</text><text x="390" y="388" fill="#8f96a3">25.0 days left</text>
+    <text x="42" y="458" fill="#e8eaf0">Year 2026</text><text x="220" y="458" fill="#cdd2dc">67.9%</text><text x="390" y="458" fill="#8f96a3">3mo 26d left</text>
+  </g>
+  <g fill="#343943">
+    <rect x="42" y="192" width="816" height="12" rx="6"/><rect x="42" y="262" width="816" height="12" rx="6"/><rect x="42" y="332" width="816" height="12" rx="6"/><rect x="42" y="402" width="816" height="12" rx="6"/><rect x="42" y="472" width="816" height="12" rx="6"/>
+  </g>
+  <g fill="#d7a85d">
+    <rect x="42" y="192" width="811" height="12" rx="6"/><rect x="42" y="262" width="694" height="12" rx="6"/><rect x="42" y="332" width="135" height="12" rx="6"/><rect x="42" y="402" width="594" height="12" rx="6"/><rect x="42" y="472" width="554" height="12" rx="6"/>
+  </g>
+  <text x="42" y="558" fill="#8f96a3" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">Portable terminal interface · local-first · no network requests</text>
+</svg>

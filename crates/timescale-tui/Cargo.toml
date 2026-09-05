@@ -1,0 +1,19 @@
+[package]
+name = "timescale-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "timescale"
+path = "src/main.rs"
+
+[dependencies]
+chrono.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
+tachyonfx.workspace = true
+timescale-core = { path = "../timescale-core" }
