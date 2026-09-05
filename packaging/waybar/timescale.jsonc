@@ -1,0 +1,9 @@
+{
+  "custom/timescale": {
+    "exec": "timescale status --waybar",
+    "return-type": "json",
+    "interval": 30,
+    "on-click": "omarchy-launch-or-focus-tui --app-id=org.omarchy.timescale timescale",
+    "tooltip": true
+  }
+}

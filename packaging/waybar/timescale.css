@@ -1,0 +1,15 @@
+#custom-timescale {
+  padding: 0 8px;
+}
+
+#custom-timescale.early {
+  color: @foreground;
+}
+
+#custom-timescale.middle {
+  color: @accent;
+}
+
+#custom-timescale.late {
+  color: @warning;
+}
