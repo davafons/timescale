@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct SettingsView: View {
   @StateObject private var locationProvider = LocationProvider()
   @AppStorage(SettingsKey.birthTimestamp) private var birthTimestamp = 0.0
