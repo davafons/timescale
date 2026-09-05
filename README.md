@@ -1,4 +1,15 @@
-# Timescale
+<p align="center">
+  <img src="Resources/AppIcon.svg" alt="Timescale" width="128">
+</p>
+
+<h1 align="center">Timescale</h1>
+
+<p align="center">
+  <a href="https://github.com/davafons/timescale/releases/latest"><img src="https://img.shields.io/github/v/release/davafons/timescale?display_name=tag" alt="Latest Release"></a>
+  <a href="https://github.com/davafons/timescale/actions/workflows/ci.yml"><img src="https://github.com/davafons/timescale/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/davafons/timescale/blob/main/LICENSE"><img src="https://img.shields.io/github/license/davafons/timescale" alt="License"></a>
+  <a href="https://github.com/davafons/timescale/releases"><img src="https://img.shields.io/github/downloads/davafons/timescale/total" alt="Downloads"></a>
+</p>
 
 **See your time at a glance.** Timescale is a small, private, native macOS menu-bar app that turns the day, week, month, quarter, year, and an estimated lifetime into quiet progress bars.
 
