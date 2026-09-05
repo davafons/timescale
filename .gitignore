@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode user and derived data
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcodeproj/
+*.dSYM/
+
+# Generated application and release artifacts
+build/
+dist/
+
+# Local environment and signing credentials
+.env
+.env.*
+!.env.example
+*.cer
+*.p12
+*.mobileprovision
+*.provisionprofile
+
+# Test and profiling output
+*.profdata
+*.profraw
