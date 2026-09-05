@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davafons/timescale/blob/main/config/timescale.schema.json",
+  "title": "Timescale settings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "timeZone", "day", "routine", "week", "quarter", "solar", "life", "visible", "macOS", "tui"],
+  "properties": {
+    "version": { "const": 1 },
+    "timeZone": { "const": "local" },
+    "day": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "$ref": "#/$defs/time" },
+        "end": { "$ref": "#/$defs/time" }
+      }
+    },
+    "routine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "durationMinutes"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "durationMinutes": { "type": "integer", "minimum": 1, "maximum": 10080 },
+        "startedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "week": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startsOn"],
+      "properties": {
+        "startsOn": { "enum": ["monday", "sunday"] }
+      }
+    },
+    "quarter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cycle"],
+      "properties": {
+        "cycle": { "enum": ["calendar", "japanFiscal"] }
+      }
+    },
+    "solar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "latitude", "longitude"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+        "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 }
+      }
+    },
+    "life": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["birthDate", "country", "expectancyYears"],
+      "properties": {
+        "birthDate": { "type": ["string", "null"], "format": "date" },
+        "country": { "type": "string" },
+        "expectancyYears": { "type": "number", "exclusiveMinimum": 0, "maximum": 150 }
+      }
+    },
+    "visible": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["day", "week", "month", "quarter", "year", "life"] }
+    },
+    "macOS": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accent", "precision", "showRemaining"],
+      "properties": {
+        "accent": { "enum": ["system", "orange", "blue", "green", "purple", "monochrome"] },
+        "precision": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "showRemaining": { "type": "boolean" }
+      }
+    },
+    "tui": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["theme", "motion"],
+      "properties": {
+        "theme": { "enum": ["auto", "color", "catppuccin", "tokyoNight", "gruvbox", "monochrome"] },
+        "motion": { "enum": ["full", "reduced", "off"] }
+      }
+    }
+  },
+  "$defs": {
+    "time": {
+      "type": "string",
+      "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+    }
+  }
+}
