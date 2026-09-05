@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  package:
+  mac-app:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v7
@@ -21,14 +21,19 @@ jobs:
           swift-version: '6.0'
       - name: Install ShellCheck
         run: brew install shellcheck
-      - name: Lint
-        run: make lint
+      - name: Lint Swift and scripts
+        run: make lint-swift
       - name: Validate release version
         run: |
           version="${GITHUB_REF_NAME#v}"
           plist_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          cargo_version=$(awk -F '"' '/^version = "/ { print $2; exit }' Cargo.toml)
           test "$version" = "$plist_version" || {
             echo "Tag version $version does not match Info.plist version $plist_version" >&2
+            exit 1
+          }
+          test "$version" = "$cargo_version" || {
+            echo "Tag version $version does not match Cargo version $cargo_version" >&2
             exit 1
           }
       - name: Test
@@ -67,12 +72,95 @@ jobs:
           lipo build/Timescale.app/Contents/MacOS/Timescale -verify_arch x86_64 arm64
           (cd dist && shasum -a 256 -c SHA256SUMS)
           unzip -tq "dist/Timescale-${GITHUB_REF_NAME#v}-macOS-universal.zip"
+      - name: Upload macOS app
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-mac-app
+          path: |
+            dist/*.zip
+            dist/*.dmg
+          if-no-files-found: error
+
+  tui-unix:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x86_64
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            platform: linux-aarch64
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-14
+            platform: macos-universal
+            target: universal
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal && rustup default 1.88.0
+      - name: Package Timescale TUI
+        run: ./scripts/package-tui.sh "${GITHUB_REF_NAME#v}" "${{ matrix.platform }}" "${{ matrix.target }}"
+      - name: Verify executable
+        run: |
+          archive="dist/Timescale-${GITHUB_REF_NAME#v}-tui-${{ matrix.platform }}.tar.gz"
+          test -s "$archive"
+      - name: Upload TUI archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-tui-${{ matrix.platform }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  tui-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        shell: pwsh
+        run: rustup toolchain install 1.88.0 --profile minimal; rustup default 1.88.0
+      - name: Build Timescale TUI
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $cargoVersion = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          if ($version -ne $cargoVersion) { throw "Tag version $version does not match Cargo version $cargoVersion" }
+          cargo build --release --locked --bin timescale
+      - name: Package Timescale TUI
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          New-Item -ItemType Directory -Force dist, stage | Out-Null
+          Copy-Item target/release/timescale.exe, LICENSE stage/
+          Copy-Item config/example.json stage/config.example.json
+          Compress-Archive -Path stage/* -DestinationPath "dist/Timescale-$version-tui-windows-x86_64.zip"
+      - name: Upload TUI archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-tui-windows-x86_64
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: [mac-app, tui-unix, tui-windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Create checksums
+        run: |
+          cd dist
+          checksum_file="$RUNNER_TEMP/Timescale-SHA256SUMS"
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' \
+            | sort -z | xargs -0 sha256sum > "$checksum_file"
+          mv "$checksum_file" SHA256SUMS
+          sha256sum -c SHA256SUMS
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: |
-            dist/*.zip
-            dist/*.dmg
-            dist/SHA256SUMS
+          files: dist/*

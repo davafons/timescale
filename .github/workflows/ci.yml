@@ -18,8 +18,8 @@ jobs:
           swift-version: '6.0'
       - name: Install ShellCheck
         run: brew install shellcheck
-      - name: Lint
-        run: make lint
+      - name: Lint Swift and scripts
+        run: make lint-swift
       - name: Test
         run: swift test
       - name: Build app bundle
@@ -29,3 +29,14 @@ jobs:
           codesign --verify --deep --strict build/Timescale.app
           plutil -lint build/Timescale.app/Contents/Info.plist
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/Timescale.app/Contents/Info.plist)" = "com.davafons.timescale"
+
+  rust:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt,clippy && rustup default 1.88.0
+      - name: Lint Rust
+        run: make lint-rust
+      - name: Test Rust
+        run: make test-rust
