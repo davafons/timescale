@@ -26,10 +26,15 @@ enum Field {
     Expectancy,
     Visible(Period),
     MacAccent,
+    StatusItemSource,
     Precision,
     ShowRemaining,
     Theme,
     Motion,
+    CounterName(usize),
+    CounterDuration(usize),
+    CounterElapsed(usize),
+    CounterDelete(usize),
 }
 
 #[derive(Clone, Copy)]
@@ -39,7 +44,7 @@ struct FieldSpec {
     field: Field,
 }
 
-const FIELDS: [FieldSpec; 22] = [
+const BASE_FIELDS: [FieldSpec; 23] = [
     FieldSpec {
         section: "VISIBLE PROGRESS",
         label: "Day",
@@ -141,6 +146,11 @@ const FIELDS: [FieldSpec; 22] = [
         field: Field::MacAccent,
     },
     FieldSpec {
+        section: "APPEARANCE",
+        label: "Menu-bar source",
+        field: Field::StatusItemSource,
+    },
+    FieldSpec {
         section: "TERMINAL",
         label: "Theme",
         field: Field::Theme,
@@ -151,6 +161,35 @@ const FIELDS: [FieldSpec; 22] = [
         field: Field::Motion,
     },
 ];
+
+fn fields(settings: &Settings) -> Vec<FieldSpec> {
+    let mut result = BASE_FIELDS.to_vec();
+    for index in 0..settings.counters.len() {
+        result.extend([
+            FieldSpec {
+                section: "COUNTERS",
+                label: "Name",
+                field: Field::CounterName(index),
+            },
+            FieldSpec {
+                section: "COUNTERS",
+                label: "Target",
+                field: Field::CounterDuration(index),
+            },
+            FieldSpec {
+                section: "COUNTERS",
+                label: "Elapsed",
+                field: Field::CounterElapsed(index),
+            },
+            FieldSpec {
+                section: "COUNTERS",
+                label: "Delete",
+                field: Field::CounterDelete(index),
+            },
+        ]);
+    }
+    result
+}
 
 struct EditState {
     field: Field,
@@ -270,6 +309,8 @@ impl SettingsMenu {
         settings: &mut Settings,
         store: &ConfigStore,
     ) -> MenuAction {
+        let field_list = fields(settings);
+        self.selected = self.selected.min(field_list.len().saturating_sub(1));
         if self.editing.is_some() {
             return self.handle_edit_key(key, settings, store);
         }
@@ -285,7 +326,7 @@ impl SettingsMenu {
                 MenuAction::Stay
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                self.selected = (self.selected + 1).min(FIELDS.len() - 1);
+                self.selected = (self.selected + 1).min(field_list.len() - 1);
                 self.notice = None;
                 MenuAction::Stay
             }
@@ -295,7 +336,7 @@ impl SettingsMenu {
                 MenuAction::Stay
             }
             KeyCode::End => {
-                self.selected = FIELDS.len() - 1;
+                self.selected = field_list.len() - 1;
                 self.notice = None;
                 MenuAction::Stay
             }
@@ -305,7 +346,7 @@ impl SettingsMenu {
                 MenuAction::Stay
             }
             KeyCode::PageDown => {
-                self.selected = (self.selected + 6).min(FIELDS.len() - 1);
+                self.selected = (self.selected + 6).min(field_list.len() - 1);
                 self.notice = None;
                 MenuAction::Stay
             }
@@ -317,7 +358,7 @@ impl SettingsMenu {
                 self.change_selected(settings, store, 1);
                 MenuAction::Stay
             }
-            KeyCode::Char('g') if FIELDS[self.selected].field == Field::SolarLocation => {
+            KeyCode::Char('g') if field_list[self.selected].field == Field::SolarLocation => {
                 self.notice = Some(match request_current_location() {
                     Ok(()) => (
                         "Location requested from the Timescale Mac app".into(),
@@ -328,7 +369,7 @@ impl SettingsMenu {
                 MenuAction::Stay
             }
             KeyCode::Enter => {
-                let field = FIELDS[self.selected].field;
+                let field = field_list[self.selected].field;
                 if choices(field).is_some() {
                     self.open_picker(field, settings);
                 } else if is_text_field(field) {
@@ -413,9 +454,10 @@ impl SettingsMenu {
                         .map(|choice| (picker.field, choice))
                 });
                 if let Some((field, choice)) = selection {
+                    let expected = settings.clone();
                     let mut candidate = settings.clone();
                     let result = apply_choice(field, choice, &mut candidate)
-                        .and_then(|()| store.save(&candidate));
+                        .and_then(|()| store.save_if_unchanged(&candidate, &expected));
                     match result {
                         Ok(()) => {
                             *settings = candidate;
@@ -482,7 +524,7 @@ impl SettingsMenu {
     }
 
     fn change_selected(&mut self, settings: &mut Settings, store: &ConfigStore, direction: i8) {
-        let field = FIELDS[self.selected].field;
+        let field = fields(settings)[self.selected].field;
         if matches!(
             field,
             Field::RoutineName | Field::SolarLocation | Field::BirthDate
@@ -491,11 +533,12 @@ impl SettingsMenu {
             return;
         }
         let mut candidate = settings.clone();
-        let result =
-            change_field(field, &mut candidate, direction).and_then(|()| store.save(&candidate));
+        let result = change_field(field, &mut candidate, direction)
+            .and_then(|()| store.save_if_unchanged(&candidate, settings));
         match result {
             Ok(()) => {
                 *settings = candidate;
+                self.selected = self.selected.min(fields(settings).len().saturating_sub(1));
                 self.notice = Some(("Saved".into(), false));
             }
             Err(error) => self.notice = Some((error, true)),
@@ -555,13 +598,13 @@ impl SettingsMenu {
                 "Enter save · Esc cancel · ←→ cursor · {}",
                 edit_hint(edit.field)
             )
-        } else if FIELDS[self.selected].field == Field::SolarLocation {
+        } else if fields(settings)[self.selected].field == Field::SolarLocation {
             "g current location · Enter coordinates · ←→ no change · Esc back".into()
         } else {
             "↑↓ navigate · ←→/Space change · Enter edit · Esc back".into()
         };
         let status = self.notice.as_ref().map_or_else(
-            || format!("{} / {}", self.selected + 1, FIELDS.len()),
+            || format!("{} / {}", self.selected + 1, fields(settings).len()),
             |(message, _)| message.clone(),
         );
         let status_style = if self.notice.as_ref().is_some_and(|(_, error)| *error) {
@@ -796,10 +839,17 @@ fn apply_choice(field: Field, choice: Choice, settings: &mut Settings) -> Result
 }
 
 fn field_label(field: Field) -> &'static str {
-    FIELDS
-        .iter()
-        .find(|spec| spec.field == field)
-        .map_or("option", |spec| spec.label)
+    match field {
+        Field::WeekStart => "Week starts on",
+        Field::QuarterCycle => "Quarter cycle",
+        Field::Country => "Country",
+        Field::ShowRemaining => "Display",
+        Field::Precision => "Decimal places",
+        Field::MacAccent => "Accent",
+        Field::Theme => "Theme",
+        Field::Motion => "Motion",
+        _ => "option",
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -827,7 +877,7 @@ fn menu_rows<'a>(
 ) -> Vec<MenuRow<'a>> {
     let mut rows = Vec::new();
     let mut section = "";
-    for (index, spec) in FIELDS.iter().enumerate() {
+    for (index, spec) in fields(settings).iter().enumerate() {
         if spec.section != section {
             section = spec.section;
             rows.push(MenuRow {
@@ -901,6 +951,9 @@ fn is_text_field(field: Field) -> bool {
             | Field::SolarLocation
             | Field::BirthDate
             | Field::Expectancy
+            | Field::CounterName(_)
+            | Field::CounterDuration(_)
+            | Field::CounterElapsed(_)
     )
 }
 
@@ -912,6 +965,8 @@ fn edit_hint(field: Field) -> &'static str {
         Field::SolarLocation => "latitude, longitude · blank clears",
         Field::BirthDate => "YYYY-MM-DD · blank clears",
         Field::Expectancy => "years from 1 to 150",
+        Field::CounterName(_) => "name",
+        Field::CounterDuration(_) | Field::CounterElapsed(_) => "minutes",
         _ => "type a value",
     }
 }
@@ -930,6 +985,10 @@ fn editable_value(field: Field, settings: &Settings) -> String {
             } else {
                 format!("{hours:.2}").trim_end_matches('0').to_string()
             }
+        }
+        Field::CounterDuration(index) => settings.counters[index].target_minutes.to_string(),
+        Field::CounterElapsed(index) => {
+            format!("{:.0}", settings.counters[index].elapsed_seconds / 60.0)
         }
         Field::Expectancy if settings.life.expectancy_years.fract() == 0.0 => {
             format!("{:.0}", settings.life.expectancy_years)
@@ -976,13 +1035,44 @@ fn field_value(field: Field, settings: &Settings) -> String {
             "Elapsed"
         }
         .into(),
+        Field::StatusItemSource => status_sources(settings)
+            .into_iter()
+            .find(|(value, _)| value == &settings.mac_os.status_item_source)
+            .map(|(_, label)| label)
+            .unwrap_or_else(|| "Waking day".into()),
         Field::Theme => theme_name(&settings.tui.theme).into(),
         Field::Motion => motion_name(&settings.tui.motion).into(),
+        Field::CounterName(index) => settings.counters[index].name.clone(),
+        Field::CounterDuration(index) => {
+            format_duration_minutes(settings.counters[index].target_minutes)
+        }
+        Field::CounterElapsed(index) => {
+            format!("{} min", settings.counters[index].elapsed_seconds / 60.0)
+        }
+        Field::CounterDelete(index) => format!("Delete {}", settings.counters[index].name),
     }
 }
 
 fn check(enabled: bool) -> String {
     if enabled { "[x]" } else { "[ ]" }.into()
+}
+
+fn status_sources(settings: &Settings) -> Vec<(String, String)> {
+    let mut sources = vec![
+        ("day".into(), "Waking day".into()),
+        ("week".into(), "Week".into()),
+        ("month".into(), "Month".into()),
+        ("quarter".into(), "Quarter".into()),
+        ("year".into(), "Year".into()),
+        ("life".into(), "Life".into()),
+    ];
+    sources.extend(
+        settings
+            .counters
+            .iter()
+            .map(|counter| (format!("counter:{}", counter.id), counter.name.clone())),
+    );
+    sources
 }
 
 fn change_field(field: Field, settings: &mut Settings, direction: i8) -> Result<(), String> {
@@ -1021,6 +1111,17 @@ fn change_field(field: Field, settings: &mut Settings, direction: i8) -> Result<
                 cycle_index(settings.mac_os.precision as usize, 4, direction) as u8
         }
         Field::ShowRemaining => settings.mac_os.show_remaining = !settings.mac_os.show_remaining,
+        Field::StatusItemSource => {
+            let sources = status_sources(settings);
+            let index = sources
+                .iter()
+                .position(|(value, _)| value == &settings.mac_os.status_item_source)
+                .unwrap_or(0);
+            settings.mac_os.status_item_source = sources
+                [cycle_index(index, sources.len(), direction)]
+            .0
+            .clone();
+        }
         Field::Theme => settings.tui.theme = cycle_theme(&settings.tui.theme, direction),
         Field::Motion => settings.tui.motion = cycle_motion(&settings.tui.motion, direction),
         Field::Country => {
@@ -1037,6 +1138,16 @@ fn change_field(field: Field, settings: &mut Settings, direction: i8) -> Result<
                 (settings.life.expectancy_years + f64::from(direction)).clamp(1.0, 150.0)
         }
         Field::SolarLocation | Field::BirthDate => return Ok(()),
+        Field::CounterName(_) | Field::CounterDuration(_) | Field::CounterElapsed(_) => {
+            return Ok(());
+        }
+        Field::CounterDelete(index) => {
+            let removed_id = settings.counters[index].id.clone();
+            settings.counters.remove(index);
+            if settings.mac_os.status_item_source == format!("counter:{removed_id}") {
+                settings.mac_os.status_item_source = "day".into();
+            }
+        }
     }
     settings.validate()
 }
@@ -1091,10 +1202,32 @@ fn save_text_value(
                 .parse()
                 .map_err(|_| "Invalid life expectancy".to_string())?
         }
+        Field::CounterName(index) => candidate.counters[index].name = value.trim().into(),
+        Field::CounterDuration(index) => {
+            candidate.counters[index].target_minutes = value
+                .trim()
+                .parse()
+                .map_err(|_| "Invalid counter duration".to_string())?;
+        }
+        Field::CounterElapsed(index) => {
+            candidate.counters[index].elapsed_seconds = value
+                .trim()
+                .parse::<f64>()
+                .map_err(|_| "Invalid counter elapsed time".to_string())?
+                * 60.0;
+            candidate.counters[index].started_at = None;
+        }
+        Field::CounterDelete(index) => {
+            let removed_id = candidate.counters[index].id.clone();
+            candidate.counters.remove(index);
+            if candidate.mac_os.status_item_source == format!("counter:{removed_id}") {
+                candidate.mac_os.status_item_source = "day".into();
+            }
+        }
         _ => return Err("This setting is changed with arrows or Space".into()),
     }
     candidate.validate()?;
-    store.save(&candidate)?;
+    store.save_if_unchanged(&candidate, settings)?;
     *settings = candidate;
     Ok(())
 }
@@ -1255,7 +1388,10 @@ mod tests {
     #[test]
     fn settings_follow_the_native_app_order() {
         assert_eq!(
-            FIELDS.iter().map(|field| field.label).collect::<Vec<_>>(),
+            fields(&Settings::default())
+                .iter()
+                .map(|field| field.label)
+                .collect::<Vec<_>>(),
             vec![
                 "Day",
                 "Week",
@@ -1277,6 +1413,7 @@ mod tests {
                 "Display",
                 "Decimal places",
                 "Accent",
+                "Menu-bar source",
                 "Theme",
                 "Motion",
             ]
@@ -1286,8 +1423,8 @@ mod tests {
     #[test]
     fn a_small_terminal_scrolls_to_the_selected_setting() {
         let mut menu = SettingsMenu::new();
-        menu.selected = FIELDS.len() - 1;
         let settings = Settings::default();
+        menu.selected = fields(&settings).len() - 1;
         let backend = TestBackend::new(64, 16);
         let mut terminal = Terminal::new(backend).unwrap();
 

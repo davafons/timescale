@@ -20,7 +20,8 @@ use ratatui::widgets::{Block, Borders, Padding, Paragraph};
 use serde_json::json;
 use tachyonfx::{CellFilter, Duration as FxDuration, Effect, Interpolation, fx};
 use timescale_core::{
-    ConfigStore, Period, QuarterCycle, Settings, Snapshot, TuiMotion, TuiTheme, WeekStart, snapshot,
+    ConfigStore, CounterSettings, Period, QuarterCycle, Settings, Snapshot, TuiMotion, TuiTheme,
+    WeekStart, snapshot,
 };
 
 mod settings_ui;
@@ -209,7 +210,8 @@ fn print_help() {
         "Timescale — see your time at a glance\n\n\
 Usage:\n  timescale [--config PATH]\n  timescale status [--json|--waybar]\n  \
 timescale config <path|show|edit>\n  timescale config set <KEY> <VALUE>\n  timescale doctor\n\n\
-The interactive view updates automatically and uses q/Esc to quit or e to edit settings."
+The interactive view updates automatically. Use w to start/pause, [/] to select a counter, a to add, x to delete, r to reset, and e to edit settings.\n\
+Counter config keys include counter.add, counter.delete, and counter.<id>.name/targetMinutes/elapsedMinutes/startedAt."
     );
 }
 
@@ -223,14 +225,25 @@ fn print_status(
     if json_output {
         println!("{}", serde_json::to_string_pretty(&value)?);
     } else if waybar {
-        let day = value
-            .rows
-            .iter()
-            .find(|row| row.period == Period::Day)
-            .ok_or_else(|| {
-                other_error("the Day period must be visible for Waybar output".into())
-            })?;
-        let percent = day.elapsed * 100.0;
+        let selected = settings.mac_os.status_item_source.as_str();
+        let selected_counter = selected
+            .strip_prefix("counter:")
+            .and_then(|id| value.counters.iter().find(|counter| counter.id == id));
+        let selected_row = match selected {
+            "week" => value.rows.iter().find(|row| row.period == Period::Week),
+            "month" => value.rows.iter().find(|row| row.period == Period::Month),
+            "quarter" => value.rows.iter().find(|row| row.period == Period::Quarter),
+            "year" => value.rows.iter().find(|row| row.period == Period::Year),
+            "life" => value.rows.iter().find(|row| row.period == Period::Life),
+            _ => value.rows.iter().find(|row| row.period == Period::Day),
+        };
+        let selected_row = selected_row
+            .or_else(|| value.rows.iter().find(|row| row.period == Period::Day))
+            .or_else(|| value.rows.first());
+        let percent = selected_counter
+            .map(|counter| counter.elapsed * 100.0)
+            .or_else(|| selected_row.map(|row| row.elapsed * 100.0))
+            .ok_or_else(|| other_error("the selected Waybar source is not visible".into()))?;
         let tooltip = value
             .rows
             .iter()
@@ -243,13 +256,23 @@ fn print_status(
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let tooltip = value.routine.as_ref().map_or(tooltip.clone(), |routine| {
-            format!(
-                "{}: {:.1}%\n{tooltip}",
-                routine.name,
-                routine.elapsed * 100.0
-            )
-        });
+        let counter_tooltip = value
+            .counters
+            .iter()
+            .map(|counter| format!("{}: {:.1}%", counter.name, counter.elapsed * 100.0))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let tooltip = if counter_tooltip.is_empty() {
+            value.routine.as_ref().map_or(tooltip.clone(), |routine| {
+                format!(
+                    "{}: {:.1}%\n{tooltip}",
+                    routine.name,
+                    routine.elapsed * 100.0
+                )
+            })
+        } else {
+            format!("{counter_tooltip}\n{tooltip}")
+        };
         let class = if percent < 33.0 {
             "early"
         } else if percent < 67.0 {
@@ -268,6 +291,20 @@ fn print_status(
         );
     } else {
         println!("Timescale · {}", Local::now().format("%A, %b %-d · %H:%M"));
+        for counter in &value.counters {
+            println!(
+                "{:<16} {:>6.1}%  {}",
+                counter.name,
+                counter.elapsed * 100.0,
+                if counter.complete {
+                    "complete".into()
+                } else if counter.running {
+                    format!("{} left", duration_label(counter.remaining_seconds))
+                } else {
+                    "paused".into()
+                }
+            );
+        }
         if let Some(routine) = value.routine {
             println!(
                 "{:<16} {:>6.1}%  {}",
@@ -320,8 +357,11 @@ fn configure(store: &ConfigStore, command: ConfigCommand) -> Result<(), Box<dyn 
         ConfigCommand::Edit => edit_config(store)?,
         ConfigCommand::Set { key, value } => {
             let mut settings = store.load_or_create().map_err(other_error)?;
+            let expected = settings.clone();
             set_value(&mut settings, &key, &value)?;
-            store.save(&settings).map_err(other_error)?;
+            store
+                .save_if_unchanged(&settings, &expected)
+                .map_err(other_error)?;
             println!("Updated {key} in {}", store.path().display());
         }
     }
@@ -375,6 +415,54 @@ fn set_value(settings: &mut Settings, key: &str, value: &str) -> Result<(), Box<
                 Some(value.into())
             }
         }
+        "counter.add" => {
+            let id = new_counter_id();
+            settings.counters.push(CounterSettings {
+                id,
+                name: if value.trim().is_empty() {
+                    "New counter".into()
+                } else {
+                    value.into()
+                },
+                target_minutes: 60,
+                elapsed_seconds: 0.0,
+                started_at: None,
+            });
+        }
+        "counter.delete" => {
+            settings.counters.retain(|counter| counter.id != value);
+            if settings.mac_os.status_item_source == format!("counter:{value}") {
+                settings.mac_os.status_item_source = "day".into();
+            }
+        }
+        key if key.starts_with("counter.") => {
+            let remainder = &key["counter.".len()..];
+            let (id, property) = remainder.split_once('.').ok_or_else(|| {
+                other_error("use counter.<id>.<name|targetMinutes|elapsedMinutes|startedAt>".into())
+            })?;
+            let counter = settings
+                .counters
+                .iter_mut()
+                .find(|counter| counter.id == id)
+                .ok_or_else(|| other_error(format!("unknown counter {id:?}")))?;
+            match property {
+                "name" => counter.name = value.into(),
+                "targetMinutes" => counter.target_minutes = value.parse()?,
+                "elapsedMinutes" => counter.elapsed_seconds = value.parse::<f64>()? * 60.0,
+                "startedAt" => {
+                    counter.started_at = if value == "null" || value.is_empty() {
+                        None
+                    } else {
+                        Some(value.into())
+                    }
+                }
+                _ => {
+                    return Err(other_error(format!(
+                        "unsupported counter property {property:?}"
+                    )));
+                }
+            }
+        }
         "week.startsOn" => {
             settings.week.starts_on = match value {
                 "monday" => WeekStart::Monday,
@@ -408,6 +496,7 @@ fn set_value(settings: &mut Settings, key: &str, value: &str) -> Result<(), Box<
         "macOS.accent" => settings.mac_os.accent = value.into(),
         "macOS.precision" => settings.mac_os.precision = value.parse()?,
         "macOS.showRemaining" => settings.mac_os.show_remaining = parse_bool(value)?,
+        "macOS.statusItemSource" => settings.mac_os.status_item_source = value.into(),
         "tui.theme" => {
             settings.tui.theme = match value {
                 "auto" => TuiTheme::Auto,
@@ -503,11 +592,14 @@ fn tui_loop(
     let mut reload_error = None;
     let mut effects = TuiEffects::new(&settings);
     let mut settings_menu: Option<SettingsMenu> = None;
+    let mut selected_counter = 0usize;
     loop {
         if last_reload.elapsed() >= StdDuration::from_millis(500) {
             match store.load() {
                 Ok(updated) => {
                     settings = updated;
+                    selected_counter =
+                        selected_counter.min(settings.counters.len().saturating_sub(1));
                     reload_error = None;
                 }
                 Err(error) => reload_error = Some(error),
@@ -531,6 +623,7 @@ fn tui_loop(
                     frame,
                     &value,
                     &settings,
+                    selected_counter,
                     animation_tick,
                     reload_error.as_deref(),
                 );
@@ -554,8 +647,57 @@ fn tui_loop(
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     KeyCode::Char('e') => settings_menu = Some(SettingsMenu::new()),
+                    KeyCode::Char('[') if !settings.counters.is_empty() => {
+                        selected_counter = selected_counter.saturating_sub(1);
+                    }
+                    KeyCode::Char(']') if !settings.counters.is_empty() => {
+                        selected_counter = (selected_counter + 1).min(settings.counters.len() - 1);
+                    }
+                    KeyCode::Char('a') => {
+                        let id = new_counter_id();
+                        let mut candidate = settings.clone();
+                        candidate.counters.push(CounterSettings {
+                            id,
+                            name: "New counter".into(),
+                            target_minutes: 60,
+                            elapsed_seconds: 0.0,
+                            started_at: None,
+                        });
+                        if let Err(error) = store.save_if_unchanged(&candidate, &settings) {
+                            reload_error = Some(error);
+                        } else {
+                            settings = candidate;
+                            selected_counter = settings.counters.len().saturating_sub(1);
+                        }
+                    }
+                    KeyCode::Char('x') if !settings.counters.is_empty() => {
+                        let mut candidate = settings.clone();
+                        let remove_index = selected_counter.min(candidate.counters.len() - 1);
+                        let removed_id = candidate.counters[remove_index].id.clone();
+                        candidate.counters.remove(remove_index);
+                        if candidate.mac_os.status_item_source == format!("counter:{removed_id}") {
+                            candidate.mac_os.status_item_source = "day".into();
+                        }
+                        if let Err(error) = store.save_if_unchanged(&candidate, &settings) {
+                            reload_error = Some(error);
+                        } else {
+                            settings = candidate;
+                            selected_counter =
+                                selected_counter.min(settings.counters.len().saturating_sub(1));
+                        }
+                    }
                     KeyCode::Char('w') => {
-                        if let Err(error) = toggle_routine(&mut settings, store, Local::now()) {
+                        let result = if settings.counters.is_empty() {
+                            toggle_routine(&mut settings, store, Local::now())
+                        } else {
+                            toggle_counter(&mut settings, store, selected_counter, Local::now())
+                        };
+                        if let Err(error) = result {
+                            reload_error = Some(error);
+                        }
+                    }
+                    KeyCode::Char('r') if !settings.counters.is_empty() => {
+                        if let Err(error) = reset_counter(&mut settings, store, selected_counter) {
                             reload_error = Some(error);
                         }
                     }
@@ -584,15 +726,78 @@ fn toggle_routine(
     } else {
         Some(now.to_rfc3339())
     };
-    store.save(&candidate)?;
+    store.save_if_unchanged(&candidate, settings)?;
     *settings = candidate;
     Ok(())
+}
+
+fn new_counter_id() -> String {
+    format!(
+        "counter-{}-{}",
+        std::process::id(),
+        chrono::Utc::now()
+            .timestamp_nanos_opt()
+            .unwrap_or_else(|| chrono::Utc::now().timestamp_micros() * 1_000)
+    )
+}
+
+fn toggle_counter(
+    settings: &mut Settings,
+    store: &ConfigStore,
+    index: usize,
+    now: DateTime<Local>,
+) -> Result<(), String> {
+    let Some(counter) = settings.counters.get(index) else {
+        return Ok(());
+    };
+    let current_elapsed = counter_elapsed(counter, now)?;
+    let mut candidate = settings.clone();
+    let counter = candidate.counters.get_mut(index).expect("index checked");
+    if current_elapsed >= f64::from(counter.target_minutes) * 60.0 {
+        counter.elapsed_seconds = 0.0;
+        counter.started_at = Some(now.to_rfc3339());
+    } else if counter.started_at.is_some() {
+        counter.elapsed_seconds = current_elapsed;
+        counter.started_at = None;
+    } else {
+        counter.started_at = Some(now.to_rfc3339());
+    }
+    store.save_if_unchanged(&candidate, settings)?;
+    *settings = candidate;
+    Ok(())
+}
+
+fn reset_counter(settings: &mut Settings, store: &ConfigStore, index: usize) -> Result<(), String> {
+    if settings.counters.get(index).is_none() {
+        return Ok(());
+    }
+    let mut candidate = settings.clone();
+    let counter = candidate.counters.get_mut(index).expect("index checked");
+    counter.elapsed_seconds = 0.0;
+    counter.started_at = None;
+    store.save_if_unchanged(&candidate, settings)?;
+    *settings = candidate;
+    Ok(())
+}
+
+fn counter_elapsed(counter: &CounterSettings, now: DateTime<Local>) -> Result<f64, String> {
+    let Some(started_at) = counter.started_at.as_deref() else {
+        return Ok(counter.elapsed_seconds);
+    };
+    let start = DateTime::parse_from_rfc3339(started_at)
+        .map_err(|_| "counter.startedAt is invalid".to_string())?
+        .with_timezone(&Local);
+    Ok(
+        (counter.elapsed_seconds + (now - start).num_milliseconds().max(0) as f64 / 1000.0)
+            .min(f64::from(counter.target_minutes) * 60.0),
+    )
 }
 
 fn draw(
     frame: &mut ratatui::Frame<'_>,
     snapshot: &Snapshot,
     settings: &Settings,
+    selected_counter: usize,
     animation_tick: u64,
     reload_error: Option<&str>,
 ) {
@@ -618,6 +823,37 @@ fn draw(
         ]),
         Line::default(),
     ];
+
+    for (index, counter) in snapshot.counters.iter().enumerate() {
+        let percentage = format!(
+            "{:.*}%",
+            settings.mac_os.precision as usize,
+            counter.elapsed * 100.0
+        );
+        let remaining = if counter.complete {
+            "Complete".into()
+        } else if counter.running {
+            format!("{} left", duration_label(counter.remaining_seconds))
+        } else {
+            "Paused".into()
+        };
+        let marker = if index == selected_counter {
+            "▶ "
+        } else {
+            "  "
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{marker}{}", counter.name), title_style),
+            Span::raw("  "),
+            Span::styled(remaining, Style::default().fg(muted)),
+            Span::raw(" ".repeat(4)),
+            Span::styled(percentage, title_style),
+        ]));
+        lines.push(progress_line(counter.elapsed, None, width, accent, muted));
+        if !compact {
+            lines.push(Line::default());
+        }
+    }
 
     if let Some(routine) = &snapshot.routine {
         let percentage = format!(
@@ -794,14 +1030,21 @@ fn draw(
         }
     }
 
-    let routine_action = match &snapshot.routine {
-        Some(routine) if routine.complete => format!("w restart {}", routine.name),
-        Some(routine) => format!("w stop {}", routine.name),
-        None => format!("w start {}", settings.routine.name),
+    let routine_action = match snapshot.counters.get(selected_counter) {
+        Some(counter) if counter.complete => format!("w restart {}", counter.name),
+        Some(counter) if counter.running => format!("w pause {}", counter.name),
+        Some(counter) => format!("w start {}", counter.name),
+        None => match &snapshot.routine {
+            Some(routine) if routine.complete => format!("w restart {}", routine.name),
+            Some(routine) => format!("w stop {}", routine.name),
+            None => format!("w start {}", settings.routine.name),
+        },
     };
     let footer_left = reload_error.map_or_else(
-        || format!("{routine_action} · e edit"),
-        |error| format!("{routine_action} · e edit · {error}"),
+        || format!("{routine_action} · [/] select · a add · x delete · r reset · e edit"),
+        |error| {
+            format!("{routine_action} · [/] select · a add · x delete · r reset · e edit · {error}")
+        },
     );
     lines.push(Line::from(Span::styled(
         align(&footer_left, "q quit", width),
