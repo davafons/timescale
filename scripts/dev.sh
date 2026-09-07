@@ -3,12 +3,13 @@ set -eu
 
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 stamp_file="$project_dir/.build/timescale-dev-stamp"
-installed_app=/Applications/Timescale.app
+install_dir=${TIMESCALE_INSTALL_DIR:-/Applications}
+installed_app="$install_dir/Timescale.app"
 
 rebuild_and_launch() {
     "$project_dir/scripts/build-app.sh"
 
-    running_pid=$(pgrep -f '^/Applications/Timescale.app/Contents/MacOS/Timescale$' || true)
+    running_pid=$(pgrep -f "^$installed_app/Contents/MacOS/Timescale$" || true)
     if [ -n "$running_pid" ]; then
         kill "$running_pid"
     fi
