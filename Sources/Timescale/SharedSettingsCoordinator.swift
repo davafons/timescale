@@ -100,8 +100,10 @@ final class SharedSettingsCoordinator {
     do {
       let configuration = try JSONDecoder().decode(SharedConfiguration.self, from: data)
       try configuration.validate()
+      let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+      let hasCountersField = object?["counters"] != nil
       suppressDefaultsUntil = Date().addingTimeInterval(0.75)
-      apply(configuration)
+      apply(configuration, preserveMigratedCounters: !hasCountersField)
       lastFileData = data
     } catch {
       NSLog("Timescale ignored invalid shared settings: %@", error.localizedDescription)
@@ -110,6 +112,13 @@ final class SharedSettingsCoordinator {
 
   private func exportNow() {
     do {
+      if let currentData = try? Data(contentsOf: configurationURL),
+        let lastFileData,
+        currentData != lastFileData
+      {
+        importData(currentData)
+        return
+      }
       var configuration = existingConfiguration() ?? SharedConfiguration()
       update(&configuration)
       try configuration.validate()
@@ -149,6 +158,11 @@ final class SharedSettingsCoordinator {
       routineStartedTimestamp > 0
       ? ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: routineStartedTimestamp))
       : nil
+    if let data = defaults.string(forKey: SettingsKey.countersJSON)?.data(using: .utf8),
+      let counters = try? JSONDecoder().decode([SharedCounter].self, from: data)
+    {
+      configuration.counters = counters
+    }
     configuration.week.startsOn =
       defaults.string(forKey: SettingsKey.weekStartsOn) == WeekStartChoice.sunday.rawValue
       ? .sunday : .monday
@@ -172,9 +186,11 @@ final class SharedSettingsCoordinator {
       defaults.string(forKey: SettingsKey.accent) ?? AccentChoice.system.rawValue
     configuration.macOS.precision = defaults.integer(forKey: SettingsKey.precision)
     configuration.macOS.showRemaining = defaults.bool(forKey: SettingsKey.showRemaining)
+    configuration.macOS.statusItemSource =
+      defaults.string(forKey: SettingsKey.statusItemSource) ?? "day"
   }
 
-  private func apply(_ configuration: SharedConfiguration) {
+  private func apply(_ configuration: SharedConfiguration, preserveMigratedCounters: Bool = false) {
     if let start = try? SharedConfiguration.minutes(configuration.day.start) {
       defaults.set(start, forKey: SettingsKey.dayStartMinutes)
     }
@@ -189,6 +205,13 @@ final class SharedSettingsCoordinator {
       defaults.set(date.timeIntervalSince1970, forKey: SettingsKey.routineStartedTimestamp)
     } else {
       defaults.set(0.0, forKey: SettingsKey.routineStartedTimestamp)
+    }
+    if !preserveMigratedCounters {
+      if let data = try? JSONEncoder().encode(configuration.counters),
+        let value = String(data: data, encoding: .utf8)
+      {
+        defaults.set(value, forKey: SettingsKey.countersJSON)
+      }
     }
     defaults.set(configuration.week.startsOn.rawValue, forKey: SettingsKey.weekStartsOn)
     defaults.set(configuration.quarter.cycle.rawValue, forKey: SettingsKey.quarterCycle)
@@ -215,6 +238,7 @@ final class SharedSettingsCoordinator {
     defaults.set(configuration.macOS.accent, forKey: SettingsKey.accent)
     defaults.set(configuration.macOS.precision, forKey: SettingsKey.precision)
     defaults.set(configuration.macOS.showRemaining, forKey: SettingsKey.showRemaining)
+    defaults.set(configuration.macOS.statusItemSource, forKey: SettingsKey.statusItemSource)
   }
 
   private func visiblePeriods() -> [SharedPeriod] {

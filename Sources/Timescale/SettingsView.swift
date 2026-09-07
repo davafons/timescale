@@ -24,8 +24,6 @@ struct SettingsView: View {
   @AppStorage(SettingsKey.accent) private var accentRawValue = AccentChoice.system.rawValue
   @AppStorage(SettingsKey.dayStartMinutes) private var dayStartMinutes = 8 * 60
   @AppStorage(SettingsKey.dayEndMinutes) private var dayEndMinutes = 23 * 60
-  @AppStorage(SettingsKey.routineName) private var routineName = "Work"
-  @AppStorage(SettingsKey.routineDurationMinutes) private var routineDurationMinutes = 8 * 60
   @AppStorage(SettingsKey.showSolarEvents) private var showSolarEvents = true
   @AppStorage(SettingsKey.locationConfigured) private var locationConfigured = false
   @AppStorage(SettingsKey.latitude) private var latitude = 0.0
@@ -60,13 +58,6 @@ struct SettingsView: View {
     Binding(
       get: { lifeExpectancy },
       set: { lifeExpectancy = min(max($0, 1), 150) }
-    )
-  }
-
-  private var routineHoursBinding: Binding<Double> {
-    Binding(
-      get: { Double(routineDurationMinutes) / 60 },
-      set: { routineDurationMinutes = min(max(Int(($0 * 60).rounded()), 1), 10_080) }
     )
   }
 
@@ -113,29 +104,11 @@ struct SettingsView: View {
         .settingsRowInset()
       }
 
-      Section("Routine") {
-        Group {
-          TextField("Name", text: $routineName)
-            .onSubmit {
-              if routineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                routineName = "Work"
-              }
-            }
-          HStack {
-            Text("Duration")
-            Spacer()
-            TextField(
-              "8", value: routineHoursBinding, format: .number.precision(.fractionLength(0...2))
-            )
-            .multilineTextAlignment(.trailing)
-            .frame(width: 70)
-            Text("hours").foregroundStyle(.secondary)
-          }
-          Text("Start it from the menu-bar popover. Its progress is shared with the terminal.")
-            .font(TypographyScale.detail)
-            .foregroundStyle(.secondary)
-        }
-        .settingsRowInset()
+      Section("Counters") {
+        Text("Create and configure counters from the menu-bar popover. Counters support start, pause, resume, reset, and manual elapsed-time adjustments.")
+          .font(TypographyScale.detail)
+          .foregroundStyle(.secondary)
+          .settingsRowInset()
       }
 
       Section("Sun") {

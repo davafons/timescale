@@ -124,12 +124,28 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
 
   private func updatePercentage() {
     let defaults = UserDefaults.standard
-    let start = defaults.integer(forKey: SettingsKey.dayStartMinutes)
-    let end = defaults.integer(forKey: SettingsKey.dayEndMinutes)
-    let progress = ProgressCalculator.activeDay(at: Date(), startMinutes: start, endMinutes: end)
-    let percentage = progress.elapsed.formatted(.percent.precision(.fractionLength(0)))
+    let source = defaults.string(forKey: SettingsKey.statusItemSource) ?? "day"
+    let progress: Double
+    let label: String
+    if source.hasPrefix("counter:"),
+      let data = defaults.string(forKey: SettingsKey.countersJSON)?.data(using: .utf8),
+      let counters = try? JSONDecoder().decode([SharedCounter].self, from: data),
+      let counter = counters.first(where: { "counter:\($0.id)" == source })
+    {
+      progress = counter.elapsed(at: Date()) / Double(counter.targetMinutes * 60)
+      label = counter.name
+    } else {
+      if source != "day" {
+        defaults.set("day", forKey: SettingsKey.statusItemSource)
+      }
+      let start = defaults.integer(forKey: SettingsKey.dayStartMinutes)
+      let end = defaults.integer(forKey: SettingsKey.dayEndMinutes)
+      progress = ProgressCalculator.activeDay(at: Date(), startMinutes: start, endMinutes: end).elapsed
+      label = "waking day"
+    }
+    let percentage = min(max(progress, 0), 1).formatted(.percent.precision(.fractionLength(0)))
     statusItem.button?.title = " " + percentage
-    statusItem.button?.setAccessibilityValue("\(percentage) of waking day elapsed")
+    statusItem.button?.setAccessibilityValue("\(percentage) of \(label) elapsed")
   }
 
   private func requestCurrentLocation() {
@@ -167,6 +183,8 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
       SettingsKey.routineName: "Work",
       SettingsKey.routineDurationMinutes: 8 * 60,
       SettingsKey.routineStartedTimestamp: 0.0,
+      SettingsKey.countersJSON: "[]",
+      SettingsKey.statusItemSource: "day",
       SettingsKey.showSolarEvents: true,
       SettingsKey.locationConfigured: false,
       SettingsKey.latitude: 0.0,
@@ -176,6 +194,19 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
 
   private func migrateLegacySettings() {
     let defaults = UserDefaults.standard
+    let hasPersistedCounters = defaults.persistentDomain(forName: "com.davafons.timescale")?[SettingsKey.countersJSON] != nil
+    if !hasPersistedCounters {
+      let started = defaults.double(forKey: SettingsKey.routineStartedTimestamp)
+      let counter = SharedCounter(
+        name: defaults.string(forKey: SettingsKey.routineName) ?? "Work",
+        targetMinutes: min(max(defaults.integer(forKey: SettingsKey.routineDurationMinutes), 1), 10_080),
+        startedAt: started > 0
+          ? ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: started)) : nil
+      )
+      if let data = try? JSONEncoder().encode([counter]), let value = String(data: data, encoding: .utf8) {
+        defaults.set(value, forKey: SettingsKey.countersJSON)
+      }
+    }
     if defaults.bool(forKey: SettingsKey.birthDateConfigured),
       defaults.integer(forKey: SettingsKey.birthYear) == 0
     {

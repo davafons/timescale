@@ -91,6 +91,8 @@ enum SettingsKey {
   static let routineName = "routineName"
   static let routineDurationMinutes = "routineDurationMinutes"
   static let routineStartedTimestamp = "routineStartedTimestamp"
+  static let countersJSON = "countersJSON"
+  static let statusItemSource = "statusItemSource"
   static let showSolarEvents = "showSolarEvents"
   static let locationConfigured = "locationConfigured"
   static let latitude = "latitude"
