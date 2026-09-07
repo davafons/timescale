@@ -1,4 +1,5 @@
 import SwiftUI
+import TimescaleCore
 
 enum AccentChoice: String, CaseIterable, Identifiable {
   case system, orange, blue, green, purple, monochrome
@@ -93,8 +94,33 @@ enum SettingsKey {
   static let routineStartedTimestamp = "routineStartedTimestamp"
   static let countersJSON = "countersJSON"
   static let statusItemSource = "statusItemSource"
+  static let collapsedProgressSourcesJSON = "collapsedProgressSourcesJSON"
+  static let lastInteractionTimestamp = "lastInteractionTimestamp"
+  static let interactionHistoryJSON = "interactionHistoryJSON"
+  static let awarenessThresholdMinutes = "awarenessThresholdMinutes"
   static let showSolarEvents = "showSolarEvents"
   static let locationConfigured = "locationConfigured"
   static let latitude = "latitude"
   static let longitude = "longitude"
+}
+
+extension InteractionHistory {
+  static func record(
+    _ timestamp: TimeInterval,
+    source: String,
+    appName: String? = nil,
+    bundleIdentifier: String? = nil,
+    in defaults: UserDefaults
+  ) {
+    let current = defaults.string(forKey: SettingsKey.interactionHistoryJSON) ?? "[]"
+    guard
+      let value = appending(
+        timestamp: timestamp,
+        source: source,
+        appName: appName,
+        bundleIdentifier: bundleIdentifier,
+        to: current)
+    else { return }
+    defaults.set(value, forKey: SettingsKey.interactionHistoryJSON)
+  }
 }

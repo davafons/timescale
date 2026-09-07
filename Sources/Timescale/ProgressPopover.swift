@@ -3,6 +3,8 @@ import SwiftUI
 import TimescaleCore
 
 struct ProgressPopover: View {
+  @ObservedObject var checkSession: CheckSession
+  @ObservedObject var calendarProvider: HEYCalendarProvider
   @AppStorage(SettingsKey.birthTimestamp) private var birthTimestamp = 0.0
   @AppStorage(SettingsKey.birthDateConfigured) private var birthDateConfigured = false
   @AppStorage(SettingsKey.birthYear) private var birthYear = 0
@@ -25,6 +27,10 @@ struct ProgressPopover: View {
   @AppStorage(SettingsKey.dayEndMinutes) private var dayEndMinutes = 23 * 60
   @AppStorage(SettingsKey.countersJSON) private var countersJSON = "[]"
   @AppStorage(SettingsKey.statusItemSource) private var statusItemSource = "day"
+  @AppStorage(SettingsKey.collapsedProgressSourcesJSON)
+  private var collapsedProgressSourcesJSON = "[]"
+  @AppStorage(SettingsKey.interactionHistoryJSON) private var interactionHistoryJSON = "[]"
+  @AppStorage(SettingsKey.awarenessThresholdMinutes) private var awarenessThresholdMinutes = 90
   @AppStorage(SettingsKey.showSolarEvents) private var showSolarEvents = true
   @AppStorage(SettingsKey.locationConfigured) private var locationConfigured = false
   @AppStorage(SettingsKey.latitude) private var latitude = 0.0
@@ -37,6 +43,13 @@ struct ProgressPopover: View {
       let value = try? JSONDecoder().decode([SharedCounter].self, from: data)
     else { return [] }
     return value
+  }
+
+  private var collapsedProgressSources: Set<String> {
+    guard let data = collapsedProgressSourcesJSON.data(using: .utf8),
+      let sources = try? JSONDecoder().decode([String].self, from: data)
+    else { return [] }
+    return Set(sources)
   }
 
   private var accent: Color {
@@ -52,21 +65,11 @@ struct ProgressPopover: View {
   }
 
   var body: some View {
-    TimelineView(.periodic(from: .now, by: 30)) { context in
+    TimelineView(.periodic(from: .now, by: 60)) { context in
       VStack(alignment: .leading, spacing: LayoutScale.xLarge) {
         header(date: context.date)
 
         VStack(spacing: LayoutScale.xLarge) {
-          ForEach(counters) { counter in
-            counterRow(counter, at: context.date)
-          }
-          Button {
-            isAddingCounter = true
-          } label: {
-            Label("Add counter", systemImage: "plus.circle")
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(.secondary)
           if showDay {
             dayRow(at: context.date)
           }
@@ -80,7 +83,10 @@ struct ProgressPopover: View {
               showRemaining: showRemaining,
               precision: precision,
               accent: accent,
-              onSelect: { statusItemSource = "week" }
+              isCollapsed: isProgressCollapsed("week"),
+              isStatusSource: statusItemSource == "week",
+              onToggleCollapsed: { toggleProgress("week") },
+              onSelect: { selectSource("week") }
             )
           }
           if showMonth {
@@ -89,7 +95,10 @@ struct ProgressPopover: View {
               progress: ProgressCalculator.month(at: context.date),
               period: .month,
               showRemaining: showRemaining, precision: precision, accent: accent,
-              onSelect: { statusItemSource = "month" })
+              isCollapsed: isProgressCollapsed("month"),
+              isStatusSource: statusItemSource == "month",
+              onToggleCollapsed: { toggleProgress("month") },
+              onSelect: { selectSource("month") })
           }
           if showQuarter {
             let cycle = QuarterCycle(rawValue: quarterCycleRawValue) ?? .calendar
@@ -107,7 +116,10 @@ struct ProgressPopover: View {
               rangeStart: progress.start,
               rangeEnd: progress.end,
               rangeDisplay: .inclusiveDates,
-              onSelect: { statusItemSource = "quarter" }
+              isCollapsed: isProgressCollapsed("quarter"),
+              isStatusSource: statusItemSource == "quarter",
+              onToggleCollapsed: { toggleProgress("quarter") },
+              onSelect: { selectSource("quarter") }
             )
           }
           if showYear {
@@ -122,11 +134,63 @@ struct ProgressPopover: View {
               markerDescription: birthday(inYearOf: context.date).map {
                 "Birthday, \($0.formatted(.dateTime.month(.wide).day()))"
               },
-              onSelect: { statusItemSource = "year" }
+              isCollapsed: isProgressCollapsed("year"),
+              isStatusSource: statusItemSource == "year",
+              onToggleCollapsed: { toggleProgress("year") },
+              onSelect: { selectSource("year") }
             )
           }
           if showLife {
             lifeRow(at: context.date)
+          }
+
+          Divider()
+
+          VStack(alignment: .leading, spacing: LayoutScale.medium) {
+            HStack {
+              Text("Counters")
+                .font(TypographyScale.rowTitle)
+              Spacer()
+              Button {
+                isAddingCounter = true
+              } label: {
+                Label("Add counter", systemImage: "plus.circle")
+              }
+              .buttonStyle(.plain)
+              .foregroundStyle(.secondary)
+            }
+
+            ForEach(counters) { counter in
+              counterRow(counter, at: context.date)
+            }
+          }
+
+          if let event = calendarProvider.currentEvent {
+            Divider()
+            calendarEventRow(event, at: context.date)
+          }
+        }
+
+        let todayChecks = checksToday(at: context.date)
+        if !todayChecks.isEmpty {
+          Divider()
+
+          if let currentCheck = currentSessionCheck {
+            if todayChecks.count > 1 {
+              checkHistoryRow(
+                displayedCheck: todayChecks[todayChecks.count - 2],
+                currentCheck: currentCheck,
+                count: todayChecks.count,
+                at: context.date)
+            } else {
+              firstCheckRow
+            }
+          } else if let lastCheck = todayChecks.last {
+            checkHistoryRow(
+              displayedCheck: lastCheck,
+              currentCheck: nil,
+              count: todayChecks.count,
+              at: context.date)
           }
         }
 
@@ -135,6 +199,13 @@ struct ProgressPopover: View {
             SettingsWindowController.shared.show()
           } label: {
             Label("Settings", systemImage: "gearshape")
+          }
+          .buttonStyle(.plain)
+
+          Button {
+            HistoryWindowController.shared.show()
+          } label: {
+            Label("View history", systemImage: "clock.arrow.circlepath")
           }
           .buttonStyle(.plain)
 
@@ -149,9 +220,12 @@ struct ProgressPopover: View {
       .padding(LayoutScale.xLarge)
       .frame(width: LayoutScale.popoverWidth)
       .sheet(item: $editingCounter) { counter in
-        CounterEditor(counter: counter, isNew: false, onDelete: {
-          saveCounters(counters.filter { $0.id != counter.id })
-        }) { updated in
+        CounterEditor(
+          counter: counter, isNew: false,
+          onDelete: {
+            saveCounters(counters.filter { $0.id != counter.id })
+          }
+        ) { updated in
           replaceCounter(updated)
         }
       }
@@ -167,6 +241,7 @@ struct ProgressPopover: View {
 
   @ViewBuilder
   private func counterRow(_ counter: SharedCounter, at date: Date) -> some View {
+    let source = "counter:\(counter.id)"
     let elapsedSeconds = counter.elapsed(at: date)
     let duration = TimeInterval(counter.targetMinutes * 60)
     let start = counter.startedAt.flatMap { ISO8601DateFormatter().date(from: $0) }
@@ -184,26 +259,33 @@ struct ProgressPopover: View {
         showRemaining: false,
         precision: precision,
         accent: accent,
-        onSelect: { statusItemSource = "counter:\(counter.id)" }
+        isCollapsed: isProgressCollapsed(source),
+        isStatusSource: statusItemSource == source,
+        onToggleCollapsed: { toggleProgress(source) },
+        onSelect: { selectSource(source) }
       )
-      HStack {
-        Button(counter.startedAt == nil ? (elapsedSeconds >= duration ? "Restart" : "Start") : "Pause") {
-          toggleCounter(counter)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        Button("Edit") { editingCounter = counter }
+      if !isProgressCollapsed(source) {
+        HStack {
+          Button(
+            counter.startedAt == nil ? (elapsedSeconds >= duration ? "Restart" : "Start") : "Pause"
+          ) {
+            toggleCounter(counter)
+          }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
-        if elapsedSeconds > 0 {
-          Button("Reset") { resetCounter(counter) }
+          Button("Edit") { editingCounter = counter }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+          if elapsedSeconds > 0 {
+            Button("Reset") { resetCounter(counter) }
+              .buttonStyle(.plain)
+              .foregroundStyle(.secondary)
+          }
+          Spacer()
+          Text(formatCounterDuration(elapsedSeconds) + " / " + formatCounterDuration(duration))
+            .foregroundStyle(.secondary)
+            .font(TypographyScale.action)
         }
-        Spacer()
-        Text(formatCounterDuration(elapsedSeconds) + " / " + formatCounterDuration(duration))
-          .foregroundStyle(.secondary)
-        .font(TypographyScale.action)
       }
     }
   }
@@ -249,7 +331,15 @@ struct ProgressPopover: View {
     {
       statusItemSource = "day"
     }
-    guard let data = try? JSONEncoder().encode(value), let string = String(data: data, encoding: .utf8)
+    let activeSources = Set(value.map { "counter:\($0.id)" })
+    let retainedCollapsedSources = collapsedProgressSources.filter {
+      !$0.hasPrefix("counter:") || activeSources.contains($0)
+    }
+    if retainedCollapsedSources != collapsedProgressSources {
+      saveCollapsedProgressSources(retainedCollapsedSources)
+    }
+    guard let data = try? JSONEncoder().encode(value),
+      let string = String(data: data, encoding: .utf8)
     else { return }
     countersJSON = string
   }
@@ -275,10 +365,58 @@ struct ProgressPopover: View {
         accent: accent,
         rangeStart: progress.start,
         rangeEnd: progress.end,
-        onSelect: { statusItemSource = "day" }
+        isCollapsed: isProgressCollapsed("day"),
+        isStatusSource: statusItemSource == "day",
+        onToggleCollapsed: { toggleProgress("day") },
+        onSelect: { selectSource("day") }
       )
-      if let solar {
+      if !isProgressCollapsed("day"), let solar {
         SolarStrip(interval: progress, events: solar)
+      }
+    }
+  }
+
+  private func calendarEventRow(_ event: CalendarEvent, at date: Date) -> some View {
+    let source = "hey-event:\(event.id)"
+    let progress = TimeProgress(
+      elapsed: event.progress(at: date), start: event.start, end: event.end)
+    return VStack(alignment: .leading, spacing: LayoutScale.medium) {
+      ProgressRow(
+        title: event.title,
+        detail: "HEY event",
+        progress: progress,
+        period: .event,
+        showRemaining: false,
+        precision: precision,
+        accent: accent,
+        rangeStart: event.start,
+        rangeEnd: event.end,
+        isCollapsed: isProgressCollapsed(source),
+        isStatusSource: false,
+        onToggleCollapsed: { toggleProgress(source) },
+        onSelect: nil)
+
+      if !isProgressCollapsed(source) {
+        if let description = event.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !description.isEmpty
+        {
+          Text(description)
+            .font(TypographyScale.detail)
+            .foregroundStyle(.secondary)
+            .lineLimit(3)
+        }
+
+        if let editURL = event.editURL {
+          Button {
+            NSWorkspace.shared.open(editURL)
+          } label: {
+            Label("Open in HEY", systemImage: "arrow.up.right.square")
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(.secondary)
+          .font(TypographyScale.action)
+          .help("Open this event in HEY to view or edit it")
+        }
       }
     }
   }
@@ -360,7 +498,10 @@ struct ProgressPopover: View {
         showRemaining: showRemaining,
         precision: precision,
         accent: accent,
-        onSelect: { statusItemSource = "life" }
+        isCollapsed: isProgressCollapsed("life"),
+        isStatusSource: statusItemSource == "life",
+        onToggleCollapsed: { toggleProgress("life") },
+        onSelect: { selectSource("life") }
       )
     } else {
       VStack(alignment: .leading, spacing: LayoutScale.small) {
@@ -374,6 +515,143 @@ struct ProgressPopover: View {
           .foregroundStyle(.secondary)
       }
     }
+  }
+
+  private func selectSource(_ source: String) {
+    statusItemSource = source
+  }
+
+  private func isProgressCollapsed(_ source: String) -> Bool {
+    collapsedProgressSources.contains(source)
+  }
+
+  private func toggleProgress(_ source: String) {
+    var sources = collapsedProgressSources
+    if !sources.insert(source).inserted {
+      sources.remove(source)
+    }
+    saveCollapsedProgressSources(sources)
+  }
+
+  private func saveCollapsedProgressSources(_ sources: Set<String>) {
+    guard let data = try? JSONEncoder().encode(sources.sorted()),
+      let value = String(data: data, encoding: .utf8)
+    else { return }
+    collapsedProgressSourcesJSON = value
+  }
+
+  private var checkHistory: [InteractionHistory.Check] {
+    InteractionHistory.checks(from: interactionHistoryJSON)
+  }
+
+  private var currentSessionCheck: InteractionHistory.Check? {
+    guard let timestamp = checkSession.currentTimestamp,
+      let latest = checkHistory.last,
+      latest.timestamp == timestamp
+    else { return nil }
+    return latest
+  }
+
+  private var firstCheckRow: some View {
+    VStack(alignment: .leading, spacing: LayoutScale.small) {
+      HStack(alignment: .firstTextBaseline) {
+        Text("First check today")
+          .font(TypographyScale.rowTitle)
+        Spacer()
+        Text("0% since a prior check")
+          .font(TypographyScale.rowValue)
+      }
+      Text("Your next check will show the time and waking-day percentage since this one.")
+        .font(TypographyScale.detail)
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  private func checkHistoryRow(
+    displayedCheck: InteractionHistory.Check,
+    currentCheck: InteractionHistory.Check?,
+    count: Int,
+    at date: Date
+  ) -> some View {
+    let displayedDate = Date(timeIntervalSince1970: displayedCheck.timestamp)
+    let comparisonDate = currentCheck.map { Date(timeIntervalSince1970: $0.timestamp) } ?? date
+    let elapsed = max(comparisonDate.timeIntervalSince(displayedDate), 0)
+    let dayPercentage = wakingDayPercentage(from: displayedDate, to: comparisonDate)
+    return VStack(alignment: .leading, spacing: LayoutScale.small) {
+      HStack(alignment: .firstTextBaseline) {
+        Text(count == 1 ? "1 check today" : "\(count) checks today")
+          .font(TypographyScale.rowTitle)
+        Spacer()
+        VStack(alignment: .trailing, spacing: LayoutScale.xSmall) {
+          Text(
+            "\(elapsedSince(displayedDate, at: comparisonDate)) · \(dayPercentage.formatted(.number.precision(.fractionLength(1))))%"
+          )
+          .font(TypographyScale.rowValue)
+          Text("Since last check")
+            .supportingTextStyle()
+        }
+      }
+      if elapsed >= Double(awarenessThresholdMinutes * 60) {
+        Label("Longer than your reminder interval", systemImage: "bell")
+          .font(TypographyScale.detail)
+          .foregroundStyle(.orange)
+      }
+    }
+  }
+
+  private func checksToday(at date: Date) -> [InteractionHistory.Check] {
+    let calendar = Calendar.autoupdatingCurrent
+    return checkHistory.filter {
+      calendar.isDate(Date(timeIntervalSince1970: $0.timestamp), inSameDayAs: date)
+    }
+  }
+
+  private var typicalCheckGap: String {
+    let checks = checkHistory
+    guard checks.count > 2 else { return "not enough data yet" }
+    let gaps = zip(checks.dropFirst(), checks).map { $0.timestamp - $1.timestamp }
+    let average = gaps.reduce(0, +) / Double(gaps.count)
+    return elapsedSince(Date(timeIntervalSince1970: 0), at: Date(timeIntervalSince1970: average))
+  }
+
+  private var checkSourceNames: [String: String] {
+    var names = Dictionary(uniqueKeysWithValues: [
+      ("day", "Day"), ("week", "Week"), ("month", "Month"),
+      ("quarter", "Quarter"), ("year", "Year"), ("life", "Life"),
+    ])
+    for counter in counters {
+      names["counter:\(counter.id)"] = counter.name
+    }
+    return names
+  }
+
+  private func sourceLabel(_ source: String) -> String {
+    checkSourceNames[source] ?? (source.hasPrefix("counter:") ? "Deleted counter" : "Unknown")
+  }
+
+  private func wakingDayPercentage(from start: Date, to end: Date) -> Double {
+    let progress = ProgressCalculator.activeDay(
+      at: end,
+      startMinutes: dayStartMinutes,
+      endMinutes: dayEndMinutes)
+    let duration = progress.end.timeIntervalSince(progress.start)
+    guard duration > 0 else { return 0 }
+    return min(max(end.timeIntervalSince(start) / duration * 100, 0), 100)
+  }
+
+  private func elapsedSince(_ start: Date, at end: Date) -> String {
+    let seconds = max(end.timeIntervalSince(start), 0)
+    if seconds < 60 { return "less than 1 min" }
+    let minutes = Int(seconds / 60)
+    let hours = minutes / 60
+    let days = hours / 24
+    if days > 0 {
+      let remainderHours = hours % 24
+      return remainderHours == 0 ? "\(days) d" : "\(days) d \(remainderHours) hr"
+    }
+    let remainderMinutes = minutes % 60
+    if hours == 0 { return "\(minutes) min" }
+    return remainderMinutes == 0 ? "\(hours) hr" : "\(hours) hr \(remainderMinutes) min"
   }
 }
 
@@ -440,6 +718,9 @@ private struct ProgressRow: View {
   var rangeDisplay: RangeDisplay = .times
   var markerDate: Date? = nil
   var markerDescription: String? = nil
+  var isCollapsed = false
+  var isStatusSource = false
+  var onToggleCollapsed: (() -> Void)? = nil
   var onSelect: (() -> Void)? = nil
 
   private var displayedProgress: Double {
@@ -448,69 +729,91 @@ private struct ProgressRow: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: LayoutScale.none) {
-      HStack(alignment: .firstTextBaseline) {
-        HStack(alignment: .firstTextBaseline, spacing: LayoutScale.small) {
-          Text(title).font(TypographyScale.rowTitle)
-          if let detail {
-            Text(detail)
+      HStack(alignment: .firstTextBaseline, spacing: LayoutScale.small) {
+        Button {
+          onToggleCollapsed?()
+        } label: {
+          HStack(alignment: .firstTextBaseline, spacing: LayoutScale.small) {
+            HStack(alignment: .firstTextBaseline, spacing: LayoutScale.small) {
+              Text(title).font(TypographyScale.rowTitle)
+              if let detail {
+                Text(detail)
+                  .font(TypographyScale.detail)
+                  .foregroundStyle(.secondary)
+              }
+              Text("\(remainingDuration) left")
+                .supportingTextStyle()
+            }
+            Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
               .font(TypographyScale.detail)
               .foregroundStyle(.secondary)
           }
-          Text("\(remainingDuration) left")
-            .supportingTextStyle()
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(isCollapsed ? "Show" : "Hide") \(title) progress bar")
 
         Spacer(minLength: LayoutScale.small)
 
-        HStack(alignment: .firstTextBaseline, spacing: LayoutScale.small) {
-          Text("1% = \(onePercentDuration)")
-            .supportingTextStyle()
-          Text(displayedProgress, format: .percent.precision(.fractionLength(precision)))
-            .font(TypographyScale.rowValue)
-        }
-      }
-
-      if let rangeStart, let rangeEnd {
-        HStack {
-          Text(rangeLabel(for: rangeStart, isEnd: false))
-          Spacer()
-          Text(rangeLabel(for: rangeEnd, isEnd: true))
-        }
-        .supportingTextStyle()
-        .padding(.top, LayoutScale.small)
-      }
-      ZStack {
-        ProgressView(value: displayedProgress)
-          .tint(accent)
-
-        if let markerPosition {
-          GeometryReader { geometry in
-            Circle()
-              .fill(.primary)
-              .frame(width: 7, height: 7)
-              .position(
-                x: 3.5 + markerPosition * max(geometry.size.width - 7, 0),
-                y: geometry.size.height / 2
-              )
+        Text("1% = \(onePercentDuration)")
+          .supportingTextStyle()
+        Button {
+          onSelect?()
+        } label: {
+          HStack(alignment: .firstTextBaseline, spacing: LayoutScale.xSmall) {
+            Text(displayedProgress, format: .percent.precision(.fractionLength(precision)))
+              .font(TypographyScale.rowValue)
+            if isStatusSource {
+              Text("★")
+                .font(TypographyScale.supporting)
+                .foregroundStyle(.secondary)
+            }
           }
-          .accessibilityElement()
-          .accessibilityLabel(markerDescription ?? "Marker")
         }
+        .buttonStyle(.plain)
+        .help(menuBarActionLabel)
+        .accessibilityLabel(menuBarActionLabel)
       }
-      .frame(height: 8)
-      .padding(.top, rangeStart == nil ? LayoutScale.medium : LayoutScale.xSmall)
+
+      if !isCollapsed {
+        if let rangeStart, let rangeEnd {
+          HStack {
+            Text(rangeLabel(for: rangeStart, isEnd: false))
+            Spacer()
+            Text(rangeLabel(for: rangeEnd, isEnd: true))
+          }
+          .supportingTextStyle()
+          .padding(.top, LayoutScale.small)
+        }
+        ZStack {
+          ProgressView(value: displayedProgress)
+            .tint(accent)
+
+          if let markerPosition {
+            GeometryReader { geometry in
+              Circle()
+                .fill(.primary)
+                .frame(width: 7, height: 7)
+                .position(
+                  x: 3.5 + markerPosition * max(geometry.size.width - 7, 0),
+                  y: geometry.size.height / 2
+                )
+            }
+            .accessibilityElement()
+            .accessibilityLabel(markerDescription ?? "Marker")
+          }
+        }
+        .frame(height: 8)
+        .padding(.top, rangeStart == nil ? LayoutScale.medium : LayoutScale.xSmall)
+      }
     }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(title)
-    .accessibilityValue(
-      "\(displayedProgress.formatted(.percent.precision(.fractionLength(precision)))) \(showRemaining ? "remaining" : "elapsed"), \(remainingDuration) left, one percent equals \(onePercentDuration)"
-    )
-    .contentShape(Rectangle())
-    .onTapGesture { onSelect?() }
   }
 
   private var duration: TimeInterval {
     progress.end.timeIntervalSince(progress.start)
+  }
+
+  private var menuBarActionLabel: String {
+    isStatusSource ? "Showing \(title) in the menu bar" : "Show \(title) in the menu bar"
   }
 
   private var remainingDuration: String {
@@ -587,6 +890,7 @@ private enum ProgressPeriod {
   case year
   case life
   case counter
+  case event
 }
 
 private enum RangeDisplay {
@@ -594,10 +898,72 @@ private enum RangeDisplay {
   case inclusiveDates
 }
 
+private struct CheckHistoryView: View {
+  let checks: [InteractionHistory.Check]
+  let sourceNames: [String: String]
+
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 60)) { context in
+      VStack(alignment: .leading, spacing: LayoutScale.medium) {
+        HStack {
+          Text("Check history")
+            .font(TypographyScale.heading)
+          Spacer()
+          Text("\(checks.count) total")
+            .font(TypographyScale.detail)
+            .foregroundStyle(.secondary)
+        }
+        if checks.isEmpty {
+          Text("No checks yet.")
+            .foregroundStyle(.secondary)
+        } else {
+          ScrollView {
+            LazyVStack(alignment: .leading, spacing: LayoutScale.small) {
+              ForEach(Array(checks.reversed().enumerated()), id: \.offset) { _, check in
+                HStack(alignment: .firstTextBaseline) {
+                  VStack(alignment: .leading, spacing: LayoutScale.xSmall) {
+                    Text(
+                      Date(timeIntervalSince1970: check.timestamp)
+                        .formatted(date: .abbreviated, time: .standard))
+                    Text(sourceLabel(check.source))
+                      .foregroundStyle(.secondary)
+                  }
+                  Spacer()
+                  Text(elapsedSince(check.timestamp, at: context.date))
+                    .foregroundStyle(.secondary)
+                }
+                .font(TypographyScale.detail)
+              }
+            }
+          }
+        }
+      }
+      .padding(LayoutScale.xLarge)
+    }
+    .frame(width: 430, height: 420)
+  }
+
+  private func elapsedSince(_ timestamp: TimeInterval, at now: Date) -> String {
+    let minutes = max(Int(now.timeIntervalSince(Date(timeIntervalSince1970: timestamp)) / 60), 0)
+    if minutes < 1 { return "now" }
+    if minutes < 60 { return "\(minutes)m ago" }
+    let hours = minutes / 60
+    if hours < 24 { return "\(hours)h ago" }
+    return "\(hours / 24)d ago"
+  }
+
+  private func sourceLabel(_ source: String) -> String {
+    sourceNames[source] ?? (source.hasPrefix("counter:") ? "Deleted counter" : "Unknown")
+  }
+}
+
 private struct CounterEditor: View {
   @Environment(\.dismiss) private var dismiss
   @State private var counter: SharedCounter
-  @State private var elapsedMinutes: Double
+  @State private var targetHours: Int
+  @State private var targetMinuteComponent: Int
+  @State private var elapsedHours: Int
+  @State private var elapsedMinuteComponent: Int
   @State private var isRunning: Bool
   let isNew: Bool
   let onDelete: (() -> Void)?
@@ -613,7 +979,11 @@ private struct CounterEditor: View {
     editable.elapsedSeconds = counter.elapsed(at: Date())
     editable.startedAt = nil
     _counter = State(initialValue: editable)
-    _elapsedMinutes = State(initialValue: editable.elapsedSeconds / 60)
+    _targetHours = State(initialValue: editable.targetMinutes / 60)
+    _targetMinuteComponent = State(initialValue: editable.targetMinutes % 60)
+    let elapsedMinutes = max(Int(editable.elapsedSeconds.rounded() / 60), 0)
+    _elapsedHours = State(initialValue: elapsedMinutes / 60)
+    _elapsedMinuteComponent = State(initialValue: elapsedMinutes % 60)
     _isRunning = State(initialValue: counter.startedAt != nil)
     self.isNew = isNew
     self.onDelete = onDelete
@@ -621,26 +991,22 @@ private struct CounterEditor: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: LayoutScale.large) {
       Text(isNew ? "Add counter" : "Edit counter")
-        .font(.headline)
-      TextField("Name", text: $counter.name)
-      HStack {
-        Text("Target")
-        Spacer()
-        TextField("Minutes", value: targetMinutes, format: .number)
-          .multilineTextAlignment(.trailing)
-          .frame(width: 90)
-        Text("min").foregroundStyle(.secondary)
-      }
-      HStack {
-        Text("Elapsed")
-        Spacer()
-        TextField("Minutes", value: $elapsedMinutes, format: .number)
-          .multilineTextAlignment(.trailing)
-          .frame(width: 90)
-        Text("min").foregroundStyle(.secondary)
-      }
+        .font(TypographyScale.heading)
+      TextField("Counter name", text: $counter.name)
+      durationFields(
+        title: "Target duration",
+        hours: $targetHours,
+        minutes: $targetMinuteComponent)
+      durationFields(
+        title: "Elapsed time",
+        hours: $elapsedHours,
+        minutes: $elapsedMinuteComponent)
+      Toggle(isNew ? "Start now" : "Keep running", isOn: $isRunning)
+      Text("Durations use hours and minutes. You can adjust elapsed time before saving.")
+        .font(TypographyScale.detail)
+        .foregroundStyle(.secondary)
       HStack {
         Spacer()
         Button("Cancel") { dismiss() }
@@ -651,8 +1017,10 @@ private struct CounterEditor: View {
           }
         }
         Button("Save") {
-          counter.elapsedSeconds = max(elapsedMinutes, 0) * 60
-          counter.startedAt = isRunning
+          counter.targetMinutes = targetDuration
+          counter.elapsedSeconds = Double(min(elapsedDuration, targetDuration) * 60)
+          counter.startedAt =
+            isRunning
             ? ISO8601DateFormatter().string(from: Date())
             : nil
           onSave(counter)
@@ -662,15 +1030,43 @@ private struct CounterEditor: View {
         .disabled(counter.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
     }
-    .padding(24)
-    .frame(width: 340)
+    .padding(LayoutScale.xxLarge)
+    .frame(width: 390)
   }
 
-  private var targetMinutes: Binding<Double> {
-    Binding(
-      get: { Double(counter.targetMinutes) },
-      set: { counter.targetMinutes = min(max(Int($0.rounded()), 1), 10_080) }
-    )
+  private func durationFields(
+    title: String,
+    hours: Binding<Int>,
+    minutes: Binding<Int>
+  ) -> some View {
+    VStack(alignment: .leading, spacing: LayoutScale.small) {
+      Text(title)
+        .font(TypographyScale.rowTitle)
+      HStack(spacing: LayoutScale.small) {
+        TextField("Hours", value: hours, format: .number)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 68)
+        Text("hr")
+          .foregroundStyle(.secondary)
+        TextField("Minutes", value: minutes, format: .number)
+          .multilineTextAlignment(.trailing)
+          .frame(width: 68)
+        Text("min")
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  private var targetDuration: Int {
+    let hours = min(max(targetHours, 0), 168)
+    let minutes = min(max(targetMinuteComponent, 0), 59)
+    return min(max(hours * 60 + minutes, 1), 10_080)
+  }
+
+  private var elapsedDuration: Int {
+    let hours = max(elapsedHours, 0)
+    let minutes = min(max(elapsedMinuteComponent, 0), 59)
+    return max(hours * 60 + minutes, 0)
   }
 }
 

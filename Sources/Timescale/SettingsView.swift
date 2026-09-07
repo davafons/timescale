@@ -1,4 +1,5 @@
 import SwiftUI
+import TimescaleCore
 
 @MainActor
 struct SettingsView: View {
@@ -28,6 +29,9 @@ struct SettingsView: View {
   @AppStorage(SettingsKey.locationConfigured) private var locationConfigured = false
   @AppStorage(SettingsKey.latitude) private var latitude = 0.0
   @AppStorage(SettingsKey.longitude) private var longitude = 0.0
+  @AppStorage(SettingsKey.interactionHistoryJSON) private var interactionHistoryJSON = "[]"
+  @AppStorage(SettingsKey.lastInteractionTimestamp) private var lastInteractionTimestamp = 0.0
+  @State private var confirmingHistoryReset = false
 
   private var birthDate: Binding<Date> {
     Binding(
@@ -105,10 +109,12 @@ struct SettingsView: View {
       }
 
       Section("Counters") {
-        Text("Create and configure counters from the menu-bar popover. Counters support start, pause, resume, reset, and manual elapsed-time adjustments.")
-          .font(TypographyScale.detail)
-          .foregroundStyle(.secondary)
-          .settingsRowInset()
+        Text(
+          "Create and configure counters from the menu-bar popover. Counters support start, pause, resume, reset, and manual elapsed-time adjustments."
+        )
+        .font(TypographyScale.detail)
+        .foregroundStyle(.secondary)
+        .settingsRowInset()
       }
 
       Section("Sun") {
@@ -200,13 +206,49 @@ struct SettingsView: View {
         .settingsRowInset()
       }
 
+      Section("Time awareness") {
+        Group {
+          Stepper(
+            "Show the reminder after \(awarenessThresholdMinutes) min",
+            value: $awarenessThresholdMinutes,
+            in: 5...480,
+            step: 5
+          )
+          Text(
+            "Opening the menu-bar popover counts as a check. The most recent \(InteractionHistory.maximumCount) checks stay on this Mac."
+          )
+          .font(TypographyScale.detail)
+          .foregroundStyle(.secondary)
+          Button("Clear Check History", role: .destructive) {
+            confirmingHistoryReset = true
+          }
+          .disabled(InteractionHistory.checks(from: interactionHistoryJSON).isEmpty)
+        }
+        .settingsRowInset()
+      }
+
       Text("All settings stay on this Mac.")
         .font(TypographyScale.detail)
         .foregroundStyle(.secondary)
     }
     .formStyle(.grouped)
     .padding(.vertical, LayoutScale.small)
+    .confirmationDialog(
+      "Clear all check history?",
+      isPresented: $confirmingHistoryReset,
+      titleVisibility: .visible
+    ) {
+      Button("Clear History", role: .destructive) {
+        interactionHistoryJSON = "[]"
+        lastInteractionTimestamp = 0
+      }
+    } message: {
+      Text("This cannot be undone.")
+    }
   }
+
+  @AppStorage(SettingsKey.awarenessThresholdMinutes)
+  private var awarenessThresholdMinutes = 90
 
   private func timeBinding(_ minutes: Binding<Int>) -> Binding<Date> {
     Binding(
