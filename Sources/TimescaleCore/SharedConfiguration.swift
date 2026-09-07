@@ -7,6 +7,7 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
   public var timeZone: String
   public var day: SharedDaySettings
   public var routine: SharedRoutineSettings
+  public var counters: [SharedCounter]
   public var week: SharedWeekSettings
   public var quarter: SharedQuarterSettings
   public var solar: SharedSolarSettings
@@ -15,11 +16,16 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
   public var macOS: SharedMacOSSettings
   public var tui: SharedTUISettings
 
+  private enum CodingKeys: String, CodingKey {
+    case version, timeZone, day, routine, counters, week, quarter, solar, life, visible, macOS, tui
+  }
+
   public init(
     version: Int = currentVersion,
     timeZone: String = "local",
     day: SharedDaySettings = .init(),
     routine: SharedRoutineSettings = .init(),
+    counters: [SharedCounter] = [],
     week: SharedWeekSettings = .init(),
     quarter: SharedQuarterSettings = .init(),
     solar: SharedSolarSettings = .init(),
@@ -32,6 +38,7 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     self.timeZone = timeZone
     self.day = day
     self.routine = routine
+    self.counters = counters
     self.week = week
     self.quarter = quarter
     self.solar = solar
@@ -39,6 +46,22 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     self.visible = visible
     self.macOS = macOS
     self.tui = tui
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    version = try container.decodeIfPresent(Int.self, forKey: .version) ?? Self.currentVersion
+    timeZone = try container.decodeIfPresent(String.self, forKey: .timeZone) ?? "local"
+    day = try container.decodeIfPresent(SharedDaySettings.self, forKey: .day) ?? .init()
+    routine = try container.decodeIfPresent(SharedRoutineSettings.self, forKey: .routine) ?? .init()
+    counters = try container.decodeIfPresent([SharedCounter].self, forKey: .counters) ?? []
+    week = try container.decodeIfPresent(SharedWeekSettings.self, forKey: .week) ?? .init()
+    quarter = try container.decodeIfPresent(SharedQuarterSettings.self, forKey: .quarter) ?? .init()
+    solar = try container.decodeIfPresent(SharedSolarSettings.self, forKey: .solar) ?? .init()
+    life = try container.decodeIfPresent(SharedLifeSettings.self, forKey: .life) ?? .init()
+    visible = try container.decodeIfPresent([SharedPeriod].self, forKey: .visible) ?? SharedPeriod.allCases
+    macOS = try container.decodeIfPresent(SharedMacOSSettings.self, forKey: .macOS) ?? .init()
+    tui = try container.decodeIfPresent(SharedTUISettings.self, forKey: .tui) ?? .init()
   }
 
   public func validate() throws {
@@ -55,6 +78,16 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     }
     guard (1...10_080).contains(routine.durationMinutes) else {
       throw SharedConfigurationError.invalid("routine.durationMinutes must be between 1 and 10080.")
+    }
+    guard counters.count <= 100 else {
+      throw SharedConfigurationError.invalid("counters must contain at most 100 items.")
+    }
+    var counterIDs = Set<String>()
+    for counter in counters {
+      guard counterIDs.insert(counter.id).inserted else {
+        throw SharedConfigurationError.invalid("counters must not contain duplicate IDs.")
+      }
+      try counter.validate()
     }
     if let startedAt = routine.startedAt,
       ISO8601DateFormatter().date(from: startedAt) == nil
@@ -78,6 +111,14 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     guard ["system", "orange", "blue", "green", "purple", "monochrome"].contains(macOS.accent)
     else {
       throw SharedConfigurationError.invalid("macOS.accent is not supported.")
+    }
+    let source = macOS.statusItemSource
+    let validSource = ["day", "week", "month", "quarter", "year", "life"].contains(source)
+      || source.split(separator: ":", maxSplits: 1).count == 2
+        && source.hasPrefix("counter:")
+        && counters.contains { $0.id == String(source.dropFirst("counter:".count)) }
+    guard validSource else {
+      throw SharedConfigurationError.invalid("macOS.statusItemSource is not a known progress source.")
     }
     guard solar.latitude.map({ (-90...90).contains($0) }) ?? true,
       solar.longitude.map({ (-180...180).contains($0) }) ?? true,
@@ -144,6 +185,56 @@ public struct SharedRoutineSettings: Codable, Equatable, Sendable {
   }
 }
 
+public struct SharedCounter: Codable, Equatable, Sendable, Identifiable {
+  public var id: String
+  public var name: String
+  public var targetMinutes: Int
+  public var elapsedSeconds: Double
+  public var startedAt: String?
+
+  public init(
+    id: String = UUID().uuidString,
+    name: String = "Work",
+    targetMinutes: Int = 8 * 60,
+    elapsedSeconds: Double = 0,
+    startedAt: String? = nil
+  ) {
+    self.id = id
+    self.name = name
+    self.targetMinutes = targetMinutes
+    self.elapsedSeconds = elapsedSeconds
+    self.startedAt = startedAt
+  }
+
+  public func validate() throws {
+    guard !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw SharedConfigurationError.invalid("counter.id must not be empty.")
+    }
+    guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw SharedConfigurationError.invalid("counter.name must not be empty.")
+    }
+    guard (1...10_080).contains(targetMinutes) else {
+      throw SharedConfigurationError.invalid("counter.targetMinutes must be between 1 and 10080.")
+    }
+    guard elapsedSeconds.isFinite, elapsedSeconds >= 0 else {
+      throw SharedConfigurationError.invalid("counter.elapsedSeconds must be non-negative.")
+    }
+    if let startedAt, ISO8601DateFormatter().date(from: startedAt) == nil {
+      throw SharedConfigurationError.invalid("counter.startedAt must be an RFC 3339 timestamp.")
+    }
+  }
+
+  public func elapsed(at date: Date) -> Double {
+    guard let startedAt, let start = ISO8601DateFormatter().date(from: startedAt) else {
+      return min(elapsedSeconds, Double(targetMinutes * 60))
+    }
+    return min(
+      max(elapsedSeconds + max(date.timeIntervalSince(start), 0), 0),
+      Double(targetMinutes * 60)
+    )
+  }
+}
+
 public enum SharedWeekStart: String, Codable, CaseIterable, Sendable {
   case monday, sunday
 }
@@ -200,11 +291,26 @@ public struct SharedMacOSSettings: Codable, Equatable, Sendable {
   public var accent: String
   public var precision: Int
   public var showRemaining: Bool
+  public var statusItemSource: String
 
-  public init(accent: String = "system", precision: Int = 1, showRemaining: Bool = false) {
+  private enum CodingKeys: String, CodingKey { case accent, precision, showRemaining, statusItemSource }
+
+  public init(
+    accent: String = "system", precision: Int = 1, showRemaining: Bool = false,
+    statusItemSource: String = "day"
+  ) {
     self.accent = accent
     self.precision = precision
     self.showRemaining = showRemaining
+    self.statusItemSource = statusItemSource
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    accent = try container.decodeIfPresent(String.self, forKey: .accent) ?? "system"
+    precision = try container.decodeIfPresent(Int.self, forKey: .precision) ?? 1
+    showRemaining = try container.decodeIfPresent(Bool.self, forKey: .showRemaining) ?? false
+    statusItemSource = try container.decodeIfPresent(String.self, forKey: .statusItemSource) ?? "day"
   }
 }
 

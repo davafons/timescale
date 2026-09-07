@@ -20,6 +20,7 @@ pub struct Settings {
     pub time_zone: String,
     pub day: DaySettings,
     pub routine: RoutineSettings,
+    pub counters: Vec<CounterSettings>,
     pub week: WeekSettings,
     pub quarter: QuarterSettings,
     pub solar: SolarSettings,
@@ -37,6 +38,7 @@ impl Default for Settings {
             time_zone: "local".into(),
             day: DaySettings::default(),
             routine: RoutineSettings::default(),
+            counters: Vec::new(),
             week: WeekSettings::default(),
             quarter: QuarterSettings::default(),
             solar: SolarSettings::default(),
@@ -70,6 +72,28 @@ impl Settings {
         if let Some(started_at) = &self.routine.started_at {
             DateTime::parse_from_rfc3339(started_at)
                 .map_err(|_| "routine.startedAt must be an RFC 3339 timestamp".to_string())?;
+        }
+        if self.counters.len() > 100 {
+            return Err("counters must contain at most 100 items".into());
+        }
+        let mut counter_ids = HashSet::new();
+        for counter in &self.counters {
+            if counter.id.trim().is_empty() || !counter_ids.insert(&counter.id) {
+                return Err("counters must have unique non-empty IDs".into());
+            }
+            if counter.name.trim().is_empty() {
+                return Err("counter.name must not be empty".into());
+            }
+            if !(1..=10_080).contains(&counter.target_minutes) {
+                return Err("counter.targetMinutes must be between 1 and 10080".into());
+            }
+            if !counter.elapsed_seconds.is_finite() || counter.elapsed_seconds < 0.0 {
+                return Err("counter.elapsedSeconds must be non-negative".into());
+            }
+            if let Some(started_at) = &counter.started_at {
+                DateTime::parse_from_rfc3339(started_at)
+                    .map_err(|_| "counter.startedAt must be an RFC 3339 timestamp".to_string())?;
+            }
         }
         if !(0..=3).contains(&self.mac_os.precision) {
             return Err("macOS.precision must be between 0 and 3".into());
@@ -106,6 +130,16 @@ impl Settings {
         ) {
             return Err("macOS.accent is not supported".into());
         }
+        let source = self.mac_os.status_item_source.as_str();
+        let valid_source = matches!(
+            source,
+            "day" | "week" | "month" | "quarter" | "year" | "life"
+        ) || source
+            .strip_prefix("counter:")
+            .is_some_and(|id| self.counters.iter().any(|counter| counter.id == id));
+        if !valid_source {
+            return Err("macOS.statusItemSource is not a known progress source".into());
+        }
         Ok(())
     }
 }
@@ -139,6 +173,28 @@ impl Default for RoutineSettings {
         Self {
             name: "Work".into(),
             duration_minutes: 8 * 60,
+            started_at: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct CounterSettings {
+    pub id: String,
+    pub name: String,
+    pub target_minutes: u32,
+    pub elapsed_seconds: f64,
+    pub started_at: Option<String>,
+}
+
+impl Default for CounterSettings {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: "Work".into(),
+            target_minutes: 8 * 60,
+            elapsed_seconds: 0.0,
             started_at: None,
         }
     }
@@ -237,6 +293,7 @@ pub struct MacOsSettings {
     pub accent: String,
     pub precision: u8,
     pub show_remaining: bool,
+    pub status_item_source: String,
 }
 
 impl Default for MacOsSettings {
@@ -245,6 +302,7 @@ impl Default for MacOsSettings {
             accent: "system".into(),
             precision: 1,
             show_remaining: false,
+            status_item_source: "day".into(),
         }
     }
 }
@@ -326,6 +384,12 @@ impl ConfigStore {
 
     pub fn load_or_create(&self) -> Result<Settings, String> {
         if self.path.exists() {
+            let raw = fs::read(&self.path)
+                .map_err(|error| format!("could not read {}: {error}", self.path.display()))?;
+            let has_counters = serde_json::from_slice::<serde_json::Value>(&raw)
+                .ok()
+                .and_then(|value| value.get("counters").cloned())
+                .is_some();
             let settings = self.load()?;
             #[cfg(target_os = "macos")]
             if settings == Settings::default()
@@ -334,6 +398,18 @@ impl ConfigStore {
             {
                 self.save(&imported)?;
                 return Ok(imported);
+            }
+            if !has_counters {
+                let mut migrated = settings.clone();
+                migrated.counters.push(CounterSettings {
+                    id: "legacy-work".into(),
+                    name: migrated.routine.name.clone(),
+                    target_minutes: migrated.routine.duration_minutes,
+                    elapsed_seconds: 0.0,
+                    started_at: migrated.routine.started_at.clone(),
+                });
+                self.save(&migrated)?;
+                return Ok(migrated);
             }
             Ok(settings)
         } else {
@@ -409,6 +485,20 @@ impl ConfigStore {
             .map_err(|error| format!("could not replace {}: {error}", self.path.display()))?;
         Ok(())
     }
+
+    pub fn save_if_unchanged(
+        &self,
+        settings: &Settings,
+        expected: &Settings,
+    ) -> Result<(), String> {
+        if self.path.exists() {
+            let current = self.load()?;
+            if &current != expected {
+                return Err("configuration changed externally; reload before saving".into());
+            }
+        }
+        self.save(settings)
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -445,6 +535,14 @@ fn settings_from_macos_defaults() -> Option<Settings> {
         && let LocalResult::Single(started_at) = Utc.timestamp_millis_opt((value * 1000.0) as i64)
     {
         settings.routine.started_at = Some(started_at.to_rfc3339());
+    }
+    if let Some(value) = macos_default(domain, "countersJSON")
+        && let Ok(counters) = serde_json::from_str::<Vec<CounterSettings>>(&value)
+    {
+        settings.counters = counters;
+    }
+    if let Some(value) = macos_default(domain, "statusItemSource") {
+        settings.mac_os.status_item_source = value;
     }
     if let Some(value) = macos_default(domain, "weekStartsOn") {
         settings.week.starts_on = if value == "sunday" {
@@ -501,6 +599,15 @@ fn settings_from_macos_defaults() -> Option<Settings> {
         settings.mac_os.precision = value.clamp(0, 3) as u8;
     }
     settings.mac_os.show_remaining = macos_bool(domain, "showRemaining").unwrap_or(false);
+    if settings.counters.is_empty() {
+        settings.counters.push(CounterSettings {
+            id: "legacy-work".into(),
+            name: settings.routine.name.clone(),
+            target_minutes: settings.routine.duration_minutes,
+            elapsed_seconds: 0.0,
+            started_at: settings.routine.started_at.clone(),
+        });
+    }
     settings.validate().ok()?;
     Some(settings)
 }
@@ -570,8 +677,23 @@ pub fn config_path() -> Result<PathBuf, String> {
 pub struct Snapshot {
     pub generated_at: String,
     pub routine: Option<RoutineProgress>,
+    pub counters: Vec<CounterProgress>,
     pub rows: Vec<ProgressRow>,
     pub solar: Option<SolarEvents>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CounterProgress {
+    pub id: String,
+    pub name: String,
+    pub elapsed: f64,
+    pub remaining_seconds: f64,
+    pub duration_seconds: f64,
+    pub started_at: Option<String>,
+    pub ends_at: String,
+    pub complete: bool,
+    pub running: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -719,34 +841,77 @@ pub fn snapshot(settings: &Settings, now: DateTime<Local>) -> Result<Snapshot, S
         None
     };
 
-    let routine = settings
-        .routine
-        .started_at
-        .as_deref()
-        .map(|started_at| -> Result<RoutineProgress, String> {
-            let start = DateTime::parse_from_rfc3339(started_at)
-                .map_err(|_| "routine.startedAt must be an RFC 3339 timestamp".to_string())?
-                .with_timezone(&Local);
-            let end = start + Duration::minutes(i64::from(settings.routine.duration_minutes));
-            let duration_seconds = f64::from(settings.routine.duration_minutes) * 60.0;
-            let elapsed = fraction(now, start, end);
-            Ok(RoutineProgress {
-                name: settings.routine.name.clone(),
-                elapsed,
-                remaining_seconds: (end - now).num_milliseconds().max(0) as f64 / 1000.0,
-                duration_seconds,
-                started_at: start.to_rfc3339(),
-                ends_at: end.to_rfc3339(),
-                complete: now >= end,
+    let routine = if settings.counters.is_empty() {
+        settings
+            .routine
+            .started_at
+            .as_deref()
+            .map(|started_at| -> Result<RoutineProgress, String> {
+                let start = DateTime::parse_from_rfc3339(started_at)
+                    .map_err(|_| "routine.startedAt must be an RFC 3339 timestamp".to_string())?
+                    .with_timezone(&Local);
+                let end = start + Duration::minutes(i64::from(settings.routine.duration_minutes));
+                let duration_seconds = f64::from(settings.routine.duration_minutes) * 60.0;
+                let elapsed = fraction(now, start, end);
+                Ok(RoutineProgress {
+                    name: settings.routine.name.clone(),
+                    elapsed,
+                    remaining_seconds: (end - now).num_milliseconds().max(0) as f64 / 1000.0,
+                    duration_seconds,
+                    started_at: start.to_rfc3339(),
+                    ends_at: end.to_rfc3339(),
+                    complete: now >= end,
+                })
             })
-        })
-        .transpose()?;
+            .transpose()?
+    } else {
+        None
+    };
+
+    let counters = settings
+        .counters
+        .iter()
+        .map(|counter| counter_progress(counter, now))
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Snapshot {
         generated_at: now.to_rfc3339(),
         routine,
+        counters,
         rows,
         solar,
+    })
+}
+
+fn counter_progress(
+    counter: &CounterSettings,
+    now: DateTime<Local>,
+) -> Result<CounterProgress, String> {
+    let duration_seconds = f64::from(counter.target_minutes) * 60.0;
+    let (elapsed_seconds, started_at, running) = match counter.started_at.as_deref() {
+        Some(value) => {
+            let start = DateTime::parse_from_rfc3339(value)
+                .map_err(|_| "counter.startedAt must be an RFC 3339 timestamp".to_string())?
+                .with_timezone(&Local);
+            let extra = (now - start).num_milliseconds().max(0) as f64 / 1000.0;
+            (counter.elapsed_seconds + extra, Some(start), true)
+        }
+        None => (counter.elapsed_seconds, None, false),
+    };
+    let elapsed_seconds = elapsed_seconds.clamp(0.0, duration_seconds);
+    let anchor = started_at
+        .unwrap_or_else(|| now - Duration::milliseconds((elapsed_seconds * 1000.0) as i64));
+    let end = anchor + Duration::milliseconds((duration_seconds * 1000.0) as i64);
+    Ok(CounterProgress {
+        id: counter.id.clone(),
+        name: counter.name.clone(),
+        elapsed: elapsed_seconds / duration_seconds,
+        remaining_seconds: (duration_seconds - elapsed_seconds).max(0.0),
+        duration_seconds,
+        started_at: counter.started_at.clone(),
+        ends_at: end.to_rfc3339(),
+        complete: elapsed_seconds >= duration_seconds,
+        running: running && elapsed_seconds < duration_seconds,
     })
 }
 
@@ -1124,6 +1289,32 @@ mod tests {
         assert!((routine.elapsed - 0.25).abs() < 0.0001);
         assert_eq!(routine.remaining_seconds, 6.0 * 60.0 * 60.0);
         assert!(!routine.complete);
+    }
+
+    #[test]
+    fn counter_progress_accumulates_and_pauses() {
+        let now = Local
+            .with_ymd_and_hms(2026, 9, 6, 10, 0, 0)
+            .single()
+            .unwrap();
+        let mut settings = Settings::default();
+        settings.counters.push(CounterSettings {
+            id: "work".into(),
+            name: "Work".into(),
+            target_minutes: 7 * 60,
+            elapsed_seconds: 60.0 * 60.0,
+            started_at: Some((now - Duration::hours(2)).to_rfc3339()),
+        });
+
+        let running = snapshot(&settings, now).unwrap().counters.remove(0);
+        assert!((running.elapsed - 3.0 / 7.0).abs() < 0.0001);
+        assert!(running.running);
+
+        settings.counters[0].elapsed_seconds = 3.0 * 60.0 * 60.0;
+        settings.counters[0].started_at = None;
+        let paused = snapshot(&settings, now).unwrap().counters.remove(0);
+        assert!((paused.elapsed - 3.0 / 7.0).abs() < 0.0001);
+        assert!(!paused.running);
     }
 
     #[test]

@@ -70,4 +70,28 @@ struct SharedConfigurationTests {
       try configuration.validate()
     }
   }
+
+  @Test("Counters accumulate only while running")
+  func counterElapsedTime() throws {
+    let start = Date(timeIntervalSince1970: 1_000)
+    let formatter = ISO8601DateFormatter()
+    let counter = SharedCounter(
+      name: "Work",
+      targetMinutes: 420,
+      elapsedSeconds: 3_600,
+      startedAt: formatter.string(from: start))
+
+    #expect(counter.elapsed(at: start.addingTimeInterval(1_800)) == 5_400)
+    var paused = counter
+    paused.startedAt = nil
+    #expect(paused.elapsed(at: start.addingTimeInterval(1_800)) == 3_600)
+  }
+
+  @Test("Older shared files default new counter fields")
+  func backwardCompatibleDecode() throws {
+    let data = #"{"version":1,"timeZone":"local","day":{"start":"08:00","end":"23:00"},"routine":{"name":"Work","durationMinutes":480,"startedAt":null},"week":{"startsOn":"monday"},"quarter":{"cycle":"calendar"},"solar":{"enabled":true,"latitude":null,"longitude":null},"life":{"birthDate":null,"country":"Japan","expectancyYears":84},"visible":["day"],"macOS":{"accent":"system","precision":1,"showRemaining":false},"tui":{"theme":"auto","motion":"full"}}"#.data(using: .utf8)!
+    let configuration = try JSONDecoder().decode(SharedConfiguration.self, from: data)
+    #expect(configuration.counters.isEmpty)
+    #expect(configuration.macOS.statusItemSource == "day")
+  }
 }
