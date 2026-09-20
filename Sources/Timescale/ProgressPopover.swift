@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import TimescaleCore
 
+@MainActor
 struct ProgressPopover: View {
   @ObservedObject var checkSession: CheckSession
   @ObservedObject var calendarProvider: HEYCalendarProvider
