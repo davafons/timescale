@@ -19,6 +19,7 @@ Use `timescale status --json` for calculations, planning, or integration. The ou
 
 - `generatedAt`: timestamp for the snapshot.
 - `routine`: optional active routine progress, including its name, start/end, elapsed fraction, remaining seconds, and completion state.
+- `counters`: configurable counter progress, including stable IDs, running/complete state, and elapsed and remaining durations.
 - `rows`: configured periods in display order.
 - `elapsed`: fraction from 0 to 1, not a percentage from 0 to 100.
 - `remainingSeconds` and `onePercentSeconds`: exact durations suitable for calculations.
@@ -26,6 +27,7 @@ Use `timescale status --json` for calculations, planning, or integration. The ou
 - `detail`: labels such as quarter boundaries or current age.
 - `marker`: optional fractional position, currently used for the birthday marker on the year.
 - `solar`: optional sunrise and sunset timestamps plus their positions within the configured waking day.
+- `currentEvent`: the ongoing timed HEY calendar event when the HEY CLI is available, including its title, description, edit URL, boundaries, and elapsed fraction; otherwise `null`.
 
 Use `timescale status` only when human-readable output is sufficient. Describe snapshots in plain language and include the relevant timestamp or timezone when freshness matters.
 
@@ -61,6 +63,9 @@ Supported keys and values:
 - `routine.name`: non-empty text.
 - `routine.durationMinutes`: integer from 1 to 10080.
 - `routine.startedAt`: RFC 3339 timestamp or `null`.
+- `counter.add`: the new counter name.
+- `counter.delete`: a counter ID.
+- `counter.<id>.name`, `counter.<id>.targetMinutes`, `counter.<id>.elapsedMinutes`, and `counter.<id>.startedAt`: counter fields.
 - `week.startsOn`: `monday` or `sunday`.
 - `quarter.cycle`: `calendar` or `japanFiscal`.
 - `solar.enabled`: boolean.
@@ -69,6 +74,8 @@ Supported keys and values:
 - `life.country`: text.
 - `life.expectancyYears`: number greater than 0 and at most 150.
 - `visible`: comma-separated `day,week,month,quarter,year,life` values.
+- `macOS.statusItemSource`: a period name or `counter:<id>`; this is also the TUI's selected status-integration source.
+- `awareness.thresholdMinutes`: integer from 5 to 480.
 - `tui.theme`: `auto`, `color`, `catppuccin`, `tokyoNight`, `gruvbox`, or `monochrome`.
 - `tui.motion`: `full`, `reduced`, or `off`.
 

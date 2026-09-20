@@ -29,6 +29,9 @@ No account, analytics, or runtime network requests. Just a useful glance at the 
 - **Birthday marker** — locate your birthday in the current year.
 - **Life estimate** — compare your current age with an editable population-average lifespan.
 - **Native menu-bar percentage** — today's waking-day progress stays visible without opening anything.
+- **HEY calendar progress** — show the current timed event beside the selected progress source and open it directly in HEY.
+- **Time awareness** — record each check-in, flag long gaps, and review hourly activity, source, and application history.
+- **Selectable, collapsible progress** — choose the status source and fold individual rows in either interface.
 - **Portable TUI and CLI** — interactive bars, plain output, JSON, and Waybar integration from one small binary.
 - **Shared settings** — the Mac app and TUI use the same versioned configuration on macOS.
 
@@ -99,10 +102,15 @@ Running `timescale` opens the live TUI. It refreshes progress and shared setting
 - Enter: open a searchable picker or edit an exact value, then validate and save
 - `g` on Location: request current coordinates through the native macOS app
 - `w` on the dashboard: start, stop, or restart the configured routine
+- `↑`/`↓` or `j`/`k` on the dashboard: select a progress source
+- Enter or Space on the dashboard: collapse or expand the selected source
+- `s` on the dashboard: use the selected source for status integrations and the Mac menu bar
+- `h` on the dashboard: open check-in history
+- `o` on a selected HEY event: open the event in HEY
 - Escape: cancel an edit or return to the dashboard
 - `q`: quit from either screen
 
-The settings list follows the native app's order—visible progress, waking day, routine, sun, life estimate, and appearance—with terminal-only preferences last. It scrolls automatically in smaller terminals. Countries and other fixed choices use filtered pickers; numeric editors contain only the value, while units remain presentation text. On macOS, current-location requests are handed to the native app's Core Location flow and arrive through the shared configuration. Other platforms retain offline coordinate entry rather than contacting an IP-geolocation service. `timescale config edit` remains available for advanced direct JSON editing.
+The settings list follows the native app's order—visible progress, waking day, counters, sun, life estimate, appearance, and time awareness—with terminal-only preferences last. It scrolls automatically in smaller terminals. Countries and other fixed choices use filtered pickers; numeric editors contain only the value, while units remain presentation text. On macOS, current-location requests are handed to the native app's Core Location flow and arrive through the shared configuration. Other platforms retain offline coordinate entry rather than contacting an IP-geolocation service. `timescale config edit` remains available for advanced direct JSON editing.
 
 ```sh
 timescale
@@ -119,7 +127,7 @@ timescale config set tui.motion reduced
 timescale doctor
 ```
 
-`status --json` is the stable integration surface for plugins and scripts. `status --waybar` emits Waybar custom-module JSON.
+`status --json` is the stable integration surface for plugins and scripts and includes `currentEvent` when the HEY CLI is available. `status --waybar` emits Waybar custom-module JSON, including current-event progress.
 
 ## Agent skill
 
@@ -133,7 +141,7 @@ Settings follow [`config/timescale.schema.json`](config/timescale.schema.json) a
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/timescale/config.json`
 - Windows: `%APPDATA%\Timescale\config.json`
 
-Set `TIMESCALE_CONFIG` or pass `--config PATH` to use another location. On macOS, the native app imports existing `UserDefaults` into this file, keeps its SwiftUI controls synchronized with external TUI edits, and preserves TUI-only appearance settings.
+Set `TIMESCALE_CONFIG` or pass `--config PATH` to use another location. On macOS, the native app imports existing `UserDefaults` into this file and keeps settings, collapsed rows, reminder timing, and the latest 500 check-ins synchronized with external TUI edits while preserving TUI-only appearance settings.
 
 ## Omarchy and Waybar
 
