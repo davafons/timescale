@@ -102,9 +102,17 @@ final class SharedSettingsCoordinator {
       try configuration.validate()
       let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
       let hasCountersField = object?["counters"] != nil
+      let hasAwarenessField = object?["awareness"] != nil
       suppressDefaultsUntil = Date().addingTimeInterval(0.75)
-      apply(configuration, preserveMigratedCounters: !hasCountersField)
+      apply(
+        configuration,
+        preserveMigratedCounters: !hasCountersField,
+        preserveMigratedAwareness: !hasAwarenessField)
       lastFileData = data
+      if !hasAwarenessField {
+        suppressDefaultsUntil = .distantPast
+        exportNow()
+      }
     } catch {
       NSLog("Timescale ignored invalid shared settings: %@", error.localizedDescription)
     }
@@ -188,9 +196,18 @@ final class SharedSettingsCoordinator {
     configuration.macOS.showRemaining = defaults.bool(forKey: SettingsKey.showRemaining)
     configuration.macOS.statusItemSource =
       defaults.string(forKey: SettingsKey.statusItemSource) ?? "day"
+    configuration.awareness.thresholdMinutes =
+      defaults.integer(forKey: SettingsKey.awarenessThresholdMinutes)
+    configuration.awareness.collapsedSources = collapsedProgressSources()
+    configuration.awareness.checks = InteractionHistory.checks(
+      from: defaults.string(forKey: SettingsKey.interactionHistoryJSON) ?? "[]")
   }
 
-  private func apply(_ configuration: SharedConfiguration, preserveMigratedCounters: Bool = false) {
+  private func apply(
+    _ configuration: SharedConfiguration,
+    preserveMigratedCounters: Bool = false,
+    preserveMigratedAwareness: Bool = false
+  ) {
     if let start = try? SharedConfiguration.minutes(configuration.day.start) {
       defaults.set(start, forKey: SettingsKey.dayStartMinutes)
     }
@@ -239,6 +256,24 @@ final class SharedSettingsCoordinator {
     defaults.set(configuration.macOS.precision, forKey: SettingsKey.precision)
     defaults.set(configuration.macOS.showRemaining, forKey: SettingsKey.showRemaining)
     defaults.set(configuration.macOS.statusItemSource, forKey: SettingsKey.statusItemSource)
+    if !preserveMigratedAwareness {
+      defaults.set(
+        configuration.awareness.thresholdMinutes,
+        forKey: SettingsKey.awarenessThresholdMinutes)
+      if let data = try? JSONEncoder().encode(configuration.awareness.collapsedSources),
+        let value = String(data: data, encoding: .utf8)
+      {
+        defaults.set(value, forKey: SettingsKey.collapsedProgressSourcesJSON)
+      }
+      if let data = try? JSONEncoder().encode(configuration.awareness.checks),
+        let value = String(data: data, encoding: .utf8)
+      {
+        defaults.set(value, forKey: SettingsKey.interactionHistoryJSON)
+        defaults.set(
+          configuration.awareness.checks.last?.timestamp ?? 0,
+          forKey: SettingsKey.lastInteractionTimestamp)
+      }
+    }
   }
 
   private func visiblePeriods() -> [SharedPeriod] {
@@ -250,6 +285,15 @@ final class SharedSettingsCoordinator {
       (SettingsKey.showYear, .year),
       (SettingsKey.showLife, .life),
     ].compactMap { defaults.bool(forKey: $0.0) ? $0.1 : nil }
+  }
+
+  private func collapsedProgressSources() -> [String] {
+    guard
+      let data = defaults.string(forKey: SettingsKey.collapsedProgressSourcesJSON)?.data(
+        using: .utf8),
+      let sources = try? JSONDecoder().decode([String].self, from: data)
+    else { return [] }
+    return sources
   }
 
   private func configuredBirthDateString() -> String? {
