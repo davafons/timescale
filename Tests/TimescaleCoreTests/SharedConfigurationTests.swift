@@ -32,7 +32,7 @@ struct SharedConfigurationTests {
     let data = try Data(contentsOf: projectRoot.appendingPathComponent("config/example.json"))
     let configuration = try JSONDecoder().decode(SharedConfiguration.self, from: data)
     try configuration.validate()
-    #expect(configuration.tui.motion == .full)
+    #expect(configuration == SharedConfiguration())
   }
 
   @Test("Wall-clock settings require HH:MM")

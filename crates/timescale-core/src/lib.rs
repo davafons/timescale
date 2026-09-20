@@ -427,15 +427,22 @@ impl Period {
 #[derive(Debug, Clone)]
 pub struct ConfigStore {
     path: PathBuf,
+    import_macos_defaults: bool,
 }
 
 impl ConfigStore {
     pub fn discover() -> Result<Self, String> {
-        Ok(Self::new(config_path()?))
+        Ok(Self {
+            path: config_path()?,
+            import_macos_defaults: env::var_os("TIMESCALE_CONFIG").is_none(),
+        })
     }
 
     pub fn new(path: PathBuf) -> Self {
-        Self { path }
+        Self {
+            path,
+            import_macos_defaults: false,
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -456,7 +463,8 @@ impl ConfigStore {
                 .is_some();
             let settings = self.load()?;
             #[cfg(target_os = "macos")]
-            if settings == Settings::default()
+            if self.import_macos_defaults
+                && settings == Settings::default()
                 && let Some(imported) = settings_from_macos_defaults()
                 && imported != settings
             {
@@ -475,7 +483,10 @@ impl ConfigStore {
                     });
                 }
                 #[cfg(target_os = "macos")]
-                if !has_awareness && let Some(imported) = settings_from_macos_defaults() {
+                if self.import_macos_defaults
+                    && !has_awareness
+                    && let Some(imported) = settings_from_macos_defaults()
+                {
                     migrated.awareness = imported.awareness;
                 }
                 self.save(&migrated)?;
@@ -484,7 +495,11 @@ impl ConfigStore {
             Ok(settings)
         } else {
             #[cfg(target_os = "macos")]
-            let settings = settings_from_macos_defaults().unwrap_or_default();
+            let settings = if self.import_macos_defaults {
+                settings_from_macos_defaults().unwrap_or_default()
+            } else {
+                Settings::default()
+            };
             #[cfg(not(target_os = "macos"))]
             let settings = Settings::default();
             self.save(&settings)?;
@@ -678,7 +693,7 @@ fn settings_from_macos_defaults() -> Option<Settings> {
         settings.awareness.collapsed_sources = sources;
     }
     if let Some(value) = macos_default(domain, "interactionHistoryJSON")
-        && let Ok(checks) = serde_json::from_str::<Vec<InteractionCheck>>(&value)
+        && let Some(checks) = parse_interaction_checks(&value)
     {
         settings.awareness.checks = checks.into_iter().rev().take(500).collect::<Vec<_>>();
         settings.awareness.checks.reverse();
@@ -694,6 +709,27 @@ fn settings_from_macos_defaults() -> Option<Settings> {
     }
     settings.validate().ok()?;
     Some(settings)
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_interaction_checks(value: &str) -> Option<Vec<InteractionCheck>> {
+    let mut checks = serde_json::from_str::<Vec<InteractionCheck>>(value)
+        .or_else(|_| {
+            serde_json::from_str::<Vec<f64>>(value).map(|timestamps| {
+                timestamps
+                    .into_iter()
+                    .map(|timestamp| InteractionCheck {
+                        timestamp,
+                        source: "day".into(),
+                        app_name: None,
+                        bundle_identifier: None,
+                    })
+                    .collect()
+            })
+        })
+        .ok()?;
+    checks.sort_by(|left, right| left.timestamp.total_cmp(&right.timestamp));
+    Some(checks)
 }
 
 #[cfg(target_os = "macos")]
@@ -1313,6 +1349,8 @@ fn tan_degrees(value: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::*;
 
     #[test]
@@ -1324,11 +1362,26 @@ mod tests {
     }
 
     #[test]
+    fn explicit_config_paths_do_not_import_platform_preferences() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "timescale-explicit-config-{}-{unique}.json",
+            std::process::id()
+        ));
+        let settings = ConfigStore::new(path.clone()).load_or_create().unwrap();
+        assert_eq!(settings, Settings::default());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn shared_example_matches_rust_model() {
         let settings: Settings =
             serde_json::from_str(include_str!("../../../config/example.json")).unwrap();
         settings.validate().unwrap();
-        assert_eq!(settings.tui.motion, TuiMotion::Full);
+        assert_eq!(settings, Settings::default());
     }
 
     #[test]
@@ -1367,6 +1420,18 @@ mod tests {
         assert_eq!(settings.awareness.checks.len(), 500);
         assert_eq!(settings.awareness.checks[0].timestamp, 5.0);
         settings.validate().unwrap();
+    }
+
+    #[test]
+    fn legacy_macos_timestamps_become_sorted_day_checks() {
+        let checks = parse_interaction_checks("[300,100,200]").unwrap();
+        assert_eq!(
+            checks
+                .iter()
+                .map(|check| (check.timestamp, check.source.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(100.0, "day"), (200.0, "day"), (300.0, "day")]
+        );
     }
 
     #[test]

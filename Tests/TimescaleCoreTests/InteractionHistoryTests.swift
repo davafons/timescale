@@ -78,4 +78,42 @@ struct InteractionHistoryTests {
       InteractionHistory.checks(from: encoded)
         == [InteractionHistory.Check(timestamp: 123, source: "month")])
   }
+
+  @Test("Checks are normalized chronologically")
+  func checksAreChronological() {
+    #expect(InteractionHistory.timestamps(from: "[300,100,200]") == [100, 200, 300])
+  }
+
+  @Test("Concurrent histories merge without duplicates and remain bounded")
+  func concurrentHistoriesMerge() {
+    let first = InteractionHistory.Check(timestamp: 100, source: "day")
+    let second = InteractionHistory.Check(timestamp: 200, source: "week")
+    let third = InteractionHistory.Check(timestamp: 300, source: "month")
+
+    #expect(
+      InteractionHistory.merging([second, first], with: [second, third], maximumCount: 2)
+        == [second, third])
+  }
+
+  @Test("Concurrent append-only writers preserve both checks while an explicit clear wins")
+  func concurrentHistoriesReconcile() {
+    let original = InteractionHistory.Check(timestamp: 100, source: "day")
+    let native = InteractionHistory.Check(timestamp: 200, source: "week")
+    let terminal = InteractionHistory.Check(timestamp: 300, source: "month")
+
+    #expect(
+      InteractionHistory.reconciling(
+        previous: [original, native],
+        local: [original, native],
+        incoming: [original, terminal])
+        == [original, native, terminal])
+    #expect(
+      InteractionHistory.reconciling(
+        previous: [original], local: [original, native], incoming: [original])
+        == [original, native])
+    #expect(
+      InteractionHistory.reconciling(
+        previous: [original], local: [original], incoming: [])
+        == [])
+  }
 }

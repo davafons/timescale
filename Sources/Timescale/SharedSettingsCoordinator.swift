@@ -98,18 +98,31 @@ final class SharedSettingsCoordinator {
 
   private func importData(_ data: Data) {
     do {
-      let configuration = try JSONDecoder().decode(SharedConfiguration.self, from: data)
+      var configuration = try JSONDecoder().decode(SharedConfiguration.self, from: data)
       try configuration.validate()
       let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
       let hasCountersField = object?["counters"] != nil
       let hasAwarenessField = object?["awareness"] != nil
+      var shouldExportReconciledChecks = false
+      if hasAwarenessField, let lastFileData,
+        let previous = try? JSONDecoder().decode(SharedConfiguration.self, from: lastFileData)
+      {
+        let local = InteractionHistory.checks(
+          from: defaults.string(forKey: SettingsKey.interactionHistoryJSON) ?? "[]")
+        let reconciled = InteractionHistory.reconciling(
+          previous: previous.awareness.checks,
+          local: local,
+          incoming: configuration.awareness.checks)
+        shouldExportReconciledChecks = reconciled != configuration.awareness.checks
+        configuration.awareness.checks = reconciled
+      }
       suppressDefaultsUntil = Date().addingTimeInterval(0.75)
       apply(
         configuration,
         preserveMigratedCounters: !hasCountersField,
         preserveMigratedAwareness: !hasAwarenessField)
       lastFileData = data
-      if !hasAwarenessField {
+      if !hasAwarenessField || shouldExportReconciledChecks {
         suppressDefaultsUntil = .distantPast
         exportNow()
       }

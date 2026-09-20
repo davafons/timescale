@@ -37,12 +37,38 @@ public enum InteractionHistory {
   public static func checks(from value: String) -> [Check] {
     guard let data = value.data(using: .utf8) else { return [] }
     if let checks = try? JSONDecoder().decode([Check].self, from: data) {
-      return checks
+      return checks.sorted { $0.timestamp < $1.timestamp }
     }
     guard let timestamps = try? JSONDecoder().decode([TimeInterval].self, from: data) else {
       return []
     }
-    return timestamps.map { Check(timestamp: $0, source: "day") }
+    return timestamps.sorted().map { Check(timestamp: $0, source: "day") }
+  }
+
+  public static func merging(
+    _ existing: [Check], with additions: [Check], maximumCount: Int = maximumCount
+  ) -> [Check] {
+    var merged = existing
+    for check in additions where !merged.contains(check) {
+      merged.append(check)
+    }
+    merged.sort { $0.timestamp < $1.timestamp }
+    return Array(merged.suffix(max(maximumCount, 1)))
+  }
+
+  public static func reconciling(
+    previous: [Check], local: [Check], incoming: [Check], maximumCount: Int = maximumCount
+  ) -> [Check] {
+    let locallyAdded = local.filter { !previous.contains($0) }
+    let externallyAdded = incoming.filter { !previous.contains($0) }
+    if !externallyAdded.isEmpty {
+      return merging(
+        incoming, with: previous + locallyAdded, maximumCount: maximumCount)
+    }
+    if !locallyAdded.isEmpty {
+      return merging(incoming, with: locallyAdded, maximumCount: maximumCount)
+    }
+    return incoming
   }
 
   public static func timestamps(from value: String) -> [TimeInterval] {

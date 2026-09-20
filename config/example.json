@@ -3,12 +3,13 @@
   "timeZone": "local",
   "day": { "start": "08:00", "end": "23:00" },
   "routine": { "name": "Work", "durationMinutes": 480, "startedAt": null },
+  "counters": [],
   "week": { "startsOn": "monday" },
   "quarter": { "cycle": "calendar" },
   "solar": { "enabled": true, "latitude": null, "longitude": null },
   "life": { "birthDate": null, "country": "Japan", "expectancyYears": 84.0 },
   "visible": ["day", "week", "month", "quarter", "year", "life"],
-  "macOS": { "accent": "system", "precision": 1, "showRemaining": false },
+  "macOS": { "accent": "system", "precision": 1, "showRemaining": false, "statusItemSource": "day" },
   "tui": { "theme": "auto", "motion": "full" },
   "awareness": { "thresholdMinutes": 90, "collapsedSources": [], "checks": [] }
 }
