@@ -56,7 +56,8 @@ final class HEYCalendarProvider: ObservableObject {
   }
 
   func updateCurrentEvent(at date: Date = Date()) {
-    currentEvent = cachedEvents
+    currentEvent =
+      cachedEvents
       .filter { $0.isOngoing(at: date) }
       .sorted { $0.end < $1.end }
       .first
@@ -69,8 +70,10 @@ final class HEYCalendarProvider: ObservableObject {
       return HEYCalendarFetchOutcome(events: [], isAvailable: false)
     }
     process.executableURL = URL(fileURLWithPath: heyPath)
-    process.arguments = ["event", "list", "--starts-on", dayString(offset: -1, from: date),
-      "--ends-on", dayString(offset: 1, from: date), "--all", "--json"]
+    process.arguments = [
+      "event", "list", "--starts-on", dayString(offset: -1, from: date),
+      "--ends-on", dayString(offset: 1, from: date), "--all", "--json",
+    ]
     process.standardOutput = output
     process.standardError = FileHandle.nullDevice
 
@@ -105,9 +108,10 @@ final class HEYCalendarProvider: ObservableObject {
       "/usr/local/bin/hey",
     ]
     if let path = ProcessInfo.processInfo.environment["PATH"] {
-      paths.append(contentsOf: path.split(separator: ":").map {
-        String($0) + "/hey"
-      })
+      paths.append(
+        contentsOf: path.split(separator: ":").map {
+          String($0) + "/hey"
+        })
     }
     return paths.first { fileManager.isExecutableFile(atPath: $0) }
   }
@@ -178,8 +182,10 @@ private struct HEYISO8601Date: Decodable {
     }
     formatter.formatOptions = [.withInternetDateTime]
     guard let date = formatter.date(from: raw) else {
-      throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
-        debugDescription: "Invalid HEY timestamp: \(raw)"))
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: decoder.codingPath,
+          debugDescription: "Invalid HEY timestamp: \(raw)"))
     }
     value = date
   }

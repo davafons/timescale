@@ -199,7 +199,8 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     let percentage = min(max(result.progress, 0), 1).formatted(
       .percent.precision(.fractionLength(0)))
     if let event = calendarProvider.currentEvent {
-      let eventPercentage = event.progress(at: now).formatted(.percent.precision(.fractionLength(0)))
+      let eventPercentage = event.progress(at: now).formatted(
+        .percent.precision(.fractionLength(0)))
       statusItem.button?.image = nil
       statusItem.button?.attributedTitle = statusTitle(
         selectedPercentage: percentage, eventPercentage: eventPercentage)
