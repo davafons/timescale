@@ -9,5 +9,6 @@
   "life": { "birthDate": null, "country": "Japan", "expectancyYears": 84.0 },
   "visible": ["day", "week", "month", "quarter", "year", "life"],
   "macOS": { "accent": "system", "precision": 1, "showRemaining": false },
-  "tui": { "theme": "auto", "motion": "full" }
+  "tui": { "theme": "auto", "motion": "full" },
+  "awareness": { "thresholdMinutes": 90, "collapsedSources": [], "checks": [] }
 }

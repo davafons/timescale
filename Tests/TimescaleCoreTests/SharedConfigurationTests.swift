@@ -56,6 +56,12 @@ struct SharedConfigurationTests {
     #expect(throws: SharedConfigurationError.self) {
       try duplicates.validate()
     }
+
+    var collapsed = SharedConfiguration()
+    collapsed.awareness.collapsedSources = ["day", "day"]
+    #expect(throws: SharedConfigurationError.self) {
+      try collapsed.validate()
+    }
   }
 
   @Test("Routine configuration validates its name, duration, and start")
@@ -89,7 +95,9 @@ struct SharedConfigurationTests {
 
   @Test("Older shared files default new counter fields")
   func backwardCompatibleDecode() throws {
-    let data = #"{"version":1,"timeZone":"local","day":{"start":"08:00","end":"23:00"},"routine":{"name":"Work","durationMinutes":480,"startedAt":null},"week":{"startsOn":"monday"},"quarter":{"cycle":"calendar"},"solar":{"enabled":true,"latitude":null,"longitude":null},"life":{"birthDate":null,"country":"Japan","expectancyYears":84},"visible":["day"],"macOS":{"accent":"system","precision":1,"showRemaining":false},"tui":{"theme":"auto","motion":"full"}}"#.data(using: .utf8)!
+    let data =
+      #"{"version":1,"timeZone":"local","day":{"start":"08:00","end":"23:00"},"routine":{"name":"Work","durationMinutes":480,"startedAt":null},"week":{"startsOn":"monday"},"quarter":{"cycle":"calendar"},"solar":{"enabled":true,"latitude":null,"longitude":null},"life":{"birthDate":null,"country":"Japan","expectancyYears":84},"visible":["day"],"macOS":{"accent":"system","precision":1,"showRemaining":false},"tui":{"theme":"auto","motion":"full"}}"#
+      .data(using: .utf8)!
     let configuration = try JSONDecoder().decode(SharedConfiguration.self, from: data)
     #expect(configuration.counters.isEmpty)
     #expect(configuration.macOS.statusItemSource == "day")

@@ -29,6 +29,7 @@ pub struct Settings {
     #[serde(rename = "macOS")]
     pub mac_os: MacOsSettings,
     pub tui: TuiSettings,
+    pub awareness: AwarenessSettings,
 }
 
 impl Default for Settings {
@@ -46,6 +47,7 @@ impl Default for Settings {
             visible: Period::ALL.to_vec(),
             mac_os: MacOsSettings::default(),
             tui: TuiSettings::default(),
+            awareness: AwarenessSettings::default(),
         }
     }
 }
@@ -139,6 +141,27 @@ impl Settings {
             .is_some_and(|id| self.counters.iter().any(|counter| counter.id == id));
         if !valid_source {
             return Err("macOS.statusItemSource is not a known progress source".into());
+        }
+        if !(5..=480).contains(&self.awareness.threshold_minutes) {
+            return Err("awareness.thresholdMinutes must be between 5 and 480".into());
+        }
+        if self.awareness.checks.len() > 500 {
+            return Err("awareness.checks must contain at most 500 items".into());
+        }
+        if self
+            .awareness
+            .collapsed_sources
+            .iter()
+            .collect::<HashSet<_>>()
+            .len()
+            != self.awareness.collapsed_sources.len()
+        {
+            return Err("awareness.collapsedSources must not contain duplicates".into());
+        }
+        if self.awareness.checks.iter().any(|check| {
+            !check.timestamp.is_finite() || check.timestamp < 0.0 || check.source.trim().is_empty()
+        }) {
+            return Err("awareness checks must have a valid timestamp and source".into());
         }
         Ok(())
     }
@@ -342,6 +365,43 @@ pub enum TuiMotion {
     Off,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct AwarenessSettings {
+    pub threshold_minutes: u16,
+    pub collapsed_sources: Vec<String>,
+    pub checks: Vec<InteractionCheck>,
+}
+
+impl Default for AwarenessSettings {
+    fn default() -> Self {
+        Self {
+            threshold_minutes: 90,
+            collapsed_sources: Vec::new(),
+            checks: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InteractionCheck {
+    pub timestamp: f64,
+    pub source: String,
+    pub app_name: Option<String>,
+    pub bundle_identifier: Option<String>,
+}
+
+impl Settings {
+    pub fn record_check(&mut self, check: InteractionCheck) {
+        self.awareness.checks.push(check);
+        if self.awareness.checks.len() > 500 {
+            let excess = self.awareness.checks.len() - 500;
+            self.awareness.checks.drain(..excess);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum Period {
@@ -390,6 +450,10 @@ impl ConfigStore {
                 .ok()
                 .and_then(|value| value.get("counters").cloned())
                 .is_some();
+            let has_awareness = serde_json::from_slice::<serde_json::Value>(&raw)
+                .ok()
+                .and_then(|value| value.get("awareness").cloned())
+                .is_some();
             let settings = self.load()?;
             #[cfg(target_os = "macos")]
             if settings == Settings::default()
@@ -399,15 +463,21 @@ impl ConfigStore {
                 self.save(&imported)?;
                 return Ok(imported);
             }
-            if !has_counters {
+            if !has_counters || !has_awareness {
                 let mut migrated = settings.clone();
-                migrated.counters.push(CounterSettings {
-                    id: "legacy-work".into(),
-                    name: migrated.routine.name.clone(),
-                    target_minutes: migrated.routine.duration_minutes,
-                    elapsed_seconds: 0.0,
-                    started_at: migrated.routine.started_at.clone(),
-                });
+                if !has_counters {
+                    migrated.counters.push(CounterSettings {
+                        id: "legacy-work".into(),
+                        name: migrated.routine.name.clone(),
+                        target_minutes: migrated.routine.duration_minutes,
+                        elapsed_seconds: 0.0,
+                        started_at: migrated.routine.started_at.clone(),
+                    });
+                }
+                #[cfg(target_os = "macos")]
+                if !has_awareness && let Some(imported) = settings_from_macos_defaults() {
+                    migrated.awareness = imported.awareness;
+                }
                 self.save(&migrated)?;
                 return Ok(migrated);
             }
@@ -599,6 +669,20 @@ fn settings_from_macos_defaults() -> Option<Settings> {
         settings.mac_os.precision = value.clamp(0, 3) as u8;
     }
     settings.mac_os.show_remaining = macos_bool(domain, "showRemaining").unwrap_or(false);
+    if let Some(value) = macos_integer(domain, "awarenessThresholdMinutes") {
+        settings.awareness.threshold_minutes = value.clamp(5, 480) as u16;
+    }
+    if let Some(value) = macos_default(domain, "collapsedProgressSourcesJSON")
+        && let Ok(sources) = serde_json::from_str::<Vec<String>>(&value)
+    {
+        settings.awareness.collapsed_sources = sources;
+    }
+    if let Some(value) = macos_default(domain, "interactionHistoryJSON")
+        && let Ok(checks) = serde_json::from_str::<Vec<InteractionCheck>>(&value)
+    {
+        settings.awareness.checks = checks.into_iter().rev().take(500).collect::<Vec<_>>();
+        settings.awareness.checks.reverse();
+    }
     if settings.counters.is_empty() {
         settings.counters.push(CounterSettings {
             id: "legacy-work".into(),
@@ -1263,6 +1347,26 @@ mod tests {
             ..Settings::default()
         };
         assert!(accent.validate().is_err());
+
+        let mut collapsed = Settings::default();
+        collapsed.awareness.collapsed_sources = vec!["day".into(), "day".into()];
+        assert!(collapsed.validate().is_err());
+    }
+
+    #[test]
+    fn awareness_history_retains_the_latest_five_hundred_checks() {
+        let mut settings = Settings::default();
+        for index in 0..505 {
+            settings.record_check(InteractionCheck {
+                timestamp: f64::from(index),
+                source: "day".into(),
+                app_name: None,
+                bundle_identifier: None,
+            });
+        }
+        assert_eq!(settings.awareness.checks.len(), 500);
+        assert_eq!(settings.awareness.checks[0].timestamp, 5.0);
+        settings.validate().unwrap();
     }
 
     #[test]

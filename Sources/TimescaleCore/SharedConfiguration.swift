@@ -15,9 +15,11 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
   public var visible: [SharedPeriod]
   public var macOS: SharedMacOSSettings
   public var tui: SharedTUISettings
+  public var awareness: SharedAwarenessSettings
 
   private enum CodingKeys: String, CodingKey {
-    case version, timeZone, day, routine, counters, week, quarter, solar, life, visible, macOS, tui
+    case version, timeZone, day, routine, counters, week, quarter, solar, life, visible, macOS, tui,
+      awareness
   }
 
   public init(
@@ -32,7 +34,8 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     life: SharedLifeSettings = .init(),
     visible: [SharedPeriod] = SharedPeriod.allCases,
     macOS: SharedMacOSSettings = .init(),
-    tui: SharedTUISettings = .init()
+    tui: SharedTUISettings = .init(),
+    awareness: SharedAwarenessSettings = .init()
   ) {
     self.version = version
     self.timeZone = timeZone
@@ -46,6 +49,7 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     self.visible = visible
     self.macOS = macOS
     self.tui = tui
+    self.awareness = awareness
   }
 
   public init(from decoder: Decoder) throws {
@@ -59,9 +63,12 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     quarter = try container.decodeIfPresent(SharedQuarterSettings.self, forKey: .quarter) ?? .init()
     solar = try container.decodeIfPresent(SharedSolarSettings.self, forKey: .solar) ?? .init()
     life = try container.decodeIfPresent(SharedLifeSettings.self, forKey: .life) ?? .init()
-    visible = try container.decodeIfPresent([SharedPeriod].self, forKey: .visible) ?? SharedPeriod.allCases
+    visible =
+      try container.decodeIfPresent([SharedPeriod].self, forKey: .visible) ?? SharedPeriod.allCases
     macOS = try container.decodeIfPresent(SharedMacOSSettings.self, forKey: .macOS) ?? .init()
     tui = try container.decodeIfPresent(SharedTUISettings.self, forKey: .tui) ?? .init()
+    awareness =
+      try container.decodeIfPresent(SharedAwarenessSettings.self, forKey: .awareness) ?? .init()
   }
 
   public func validate() throws {
@@ -113,18 +120,40 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
       throw SharedConfigurationError.invalid("macOS.accent is not supported.")
     }
     let source = macOS.statusItemSource
-    let validSource = ["day", "week", "month", "quarter", "year", "life"].contains(source)
+    let validSource =
+      ["day", "week", "month", "quarter", "year", "life"].contains(source)
       || source.split(separator: ":", maxSplits: 1).count == 2
         && source.hasPrefix("counter:")
         && counters.contains { $0.id == String(source.dropFirst("counter:".count)) }
     guard validSource else {
-      throw SharedConfigurationError.invalid("macOS.statusItemSource is not a known progress source.")
+      throw SharedConfigurationError.invalid(
+        "macOS.statusItemSource is not a known progress source.")
     }
     guard solar.latitude.map({ (-90...90).contains($0) }) ?? true,
       solar.longitude.map({ (-180...180).contains($0) }) ?? true,
       (solar.latitude != nil) == (solar.longitude != nil)
     else {
       throw SharedConfigurationError.invalid("Solar coordinates are incomplete or out of range.")
+    }
+    guard (5...480).contains(awareness.thresholdMinutes) else {
+      throw SharedConfigurationError.invalid(
+        "awareness.thresholdMinutes must be between 5 and 480.")
+    }
+    guard awareness.checks.count <= InteractionHistory.maximumCount else {
+      throw SharedConfigurationError.invalid("awareness.checks must contain at most 500 items.")
+    }
+    guard Set(awareness.collapsedSources).count == awareness.collapsedSources.count else {
+      throw SharedConfigurationError.invalid(
+        "awareness.collapsedSources must not contain duplicates.")
+    }
+    guard
+      awareness.checks.allSatisfy({
+        $0.timestamp.isFinite && $0.timestamp >= 0
+          && !$0.source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      })
+    else {
+      throw SharedConfigurationError.invalid(
+        "awareness checks must have a valid timestamp and source.")
     }
   }
 
@@ -293,7 +322,9 @@ public struct SharedMacOSSettings: Codable, Equatable, Sendable {
   public var showRemaining: Bool
   public var statusItemSource: String
 
-  private enum CodingKeys: String, CodingKey { case accent, precision, showRemaining, statusItemSource }
+  private enum CodingKeys: String, CodingKey {
+    case accent, precision, showRemaining, statusItemSource
+  }
 
   public init(
     accent: String = "system", precision: Int = 1, showRemaining: Bool = false,
@@ -310,7 +341,8 @@ public struct SharedMacOSSettings: Codable, Equatable, Sendable {
     accent = try container.decodeIfPresent(String.self, forKey: .accent) ?? "system"
     precision = try container.decodeIfPresent(Int.self, forKey: .precision) ?? 1
     showRemaining = try container.decodeIfPresent(Bool.self, forKey: .showRemaining) ?? false
-    statusItemSource = try container.decodeIfPresent(String.self, forKey: .statusItemSource) ?? "day"
+    statusItemSource =
+      try container.decodeIfPresent(String.self, forKey: .statusItemSource) ?? "day"
   }
 }
 
@@ -332,5 +364,21 @@ public struct SharedTUISettings: Codable, Equatable, Sendable {
   ) {
     self.theme = theme
     self.motion = motion
+  }
+}
+
+public struct SharedAwarenessSettings: Codable, Equatable, Sendable {
+  public var thresholdMinutes: Int
+  public var collapsedSources: [String]
+  public var checks: [InteractionHistory.Check]
+
+  public init(
+    thresholdMinutes: Int = 90,
+    collapsedSources: [String] = [],
+    checks: [InteractionHistory.Check] = []
+  ) {
+    self.thresholdMinutes = thresholdMinutes
+    self.collapsedSources = collapsedSources
+    self.checks = checks
   }
 }

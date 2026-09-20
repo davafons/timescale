@@ -92,6 +92,20 @@
         "theme": { "enum": ["auto", "color", "catppuccin", "tokyoNight", "gruvbox", "monochrome"] },
         "motion": { "enum": ["full", "reduced", "off"] }
       }
+    },
+    "awareness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["thresholdMinutes", "collapsedSources", "checks"],
+      "properties": {
+        "thresholdMinutes": { "type": "integer", "minimum": 5, "maximum": 480 },
+        "collapsedSources": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "checks": {
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/check" }
+        }
+      }
     }
   },
   "$defs": {
@@ -109,6 +123,17 @@
         "targetMinutes": { "type": "integer", "minimum": 1, "maximum": 10080 },
         "elapsedSeconds": { "type": "number", "minimum": 0 },
         "startedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp", "source"],
+      "properties": {
+        "timestamp": { "type": "number", "minimum": 0 },
+        "source": { "type": "string", "pattern": ".*\\S.*" },
+        "appName": { "type": ["string", "null"] },
+        "bundleIdentifier": { "type": ["string", "null"] }
       }
     }
   }
