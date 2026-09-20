@@ -29,6 +29,8 @@ enum Field {
     StatusItemSource,
     Precision,
     ShowRemaining,
+    AwarenessThreshold,
+    ClearHistory,
     Theme,
     Motion,
     CounterName(usize),
@@ -44,7 +46,7 @@ struct FieldSpec {
     field: Field,
 }
 
-const BASE_FIELDS: [FieldSpec; 23] = [
+const BASE_FIELDS: [FieldSpec; 25] = [
     FieldSpec {
         section: "VISIBLE PROGRESS",
         label: "Day",
@@ -149,6 +151,16 @@ const BASE_FIELDS: [FieldSpec; 23] = [
         section: "APPEARANCE",
         label: "Menu-bar source",
         field: Field::StatusItemSource,
+    },
+    FieldSpec {
+        section: "TIME AWARENESS",
+        label: "Reminder after",
+        field: Field::AwarenessThreshold,
+    },
+    FieldSpec {
+        section: "TIME AWARENESS",
+        label: "Check history",
+        field: Field::ClearHistory,
     },
     FieldSpec {
         section: "TERMINAL",
@@ -285,6 +297,7 @@ pub struct SettingsMenu {
     editing: Option<EditState>,
     picker: Option<PickerState>,
     notice: Option<(String, bool)>,
+    confirm_clear: bool,
 }
 
 pub enum MenuAction {
@@ -300,6 +313,7 @@ impl SettingsMenu {
             editing: None,
             picker: None,
             notice: None,
+            confirm_clear: false,
         }
     }
 
@@ -323,11 +337,13 @@ impl SettingsMenu {
             KeyCode::Up | KeyCode::Char('k') => {
                 self.selected = self.selected.saturating_sub(1);
                 self.notice = None;
+                self.confirm_clear = false;
                 MenuAction::Stay
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.selected = (self.selected + 1).min(field_list.len() - 1);
                 self.notice = None;
+                self.confirm_clear = false;
                 MenuAction::Stay
             }
             KeyCode::Home => {
@@ -370,7 +386,26 @@ impl SettingsMenu {
             }
             KeyCode::Enter => {
                 let field = field_list[self.selected].field;
-                if choices(field).is_some() {
+                if field == Field::ClearHistory {
+                    if self.confirm_clear {
+                        let mut candidate = settings.clone();
+                        candidate.awareness.checks.clear();
+                        match store.save_if_unchanged(&candidate, settings) {
+                            Ok(()) => {
+                                *settings = candidate;
+                                self.notice = Some(("Check history cleared".into(), false));
+                                self.confirm_clear = false;
+                            }
+                            Err(error) => self.notice = Some((error, true)),
+                        }
+                    } else if settings.awareness.checks.is_empty() {
+                        self.notice = Some(("Check history is already empty".into(), false));
+                    } else {
+                        self.confirm_clear = true;
+                        self.notice =
+                            Some(("Press Enter again to clear all check history".into(), true));
+                    }
+                } else if choices(field).is_some() {
                     self.open_picker(field, settings);
                 } else if is_text_field(field) {
                     let value = editable_value(field, settings);
@@ -1042,6 +1077,13 @@ fn field_value(field: Field, settings: &Settings) -> String {
             .unwrap_or_else(|| "Waking day".into()),
         Field::Theme => theme_name(&settings.tui.theme).into(),
         Field::Motion => motion_name(&settings.tui.motion).into(),
+        Field::AwarenessThreshold => {
+            format!("{} min", settings.awareness.threshold_minutes)
+        }
+        Field::ClearHistory => format!(
+            "{} checks · Enter to clear",
+            settings.awareness.checks.len()
+        ),
         Field::CounterName(index) => settings.counters[index].name.clone(),
         Field::CounterDuration(index) => {
             format_duration_minutes(settings.counters[index].target_minutes)
@@ -1111,6 +1153,12 @@ fn change_field(field: Field, settings: &mut Settings, direction: i8) -> Result<
                 cycle_index(settings.mac_os.precision as usize, 4, direction) as u8
         }
         Field::ShowRemaining => settings.mac_os.show_remaining = !settings.mac_os.show_remaining,
+        Field::AwarenessThreshold => {
+            let adjusted =
+                i32::from(settings.awareness.threshold_minutes) + i32::from(direction) * 5;
+            settings.awareness.threshold_minutes = adjusted.clamp(5, 480) as u16;
+        }
+        Field::ClearHistory => return Ok(()),
         Field::StatusItemSource => {
             let sources = status_sources(settings);
             let index = sources
@@ -1144,6 +1192,10 @@ fn change_field(field: Field, settings: &mut Settings, direction: i8) -> Result<
         Field::CounterDelete(index) => {
             let removed_id = settings.counters[index].id.clone();
             settings.counters.remove(index);
+            settings
+                .awareness
+                .collapsed_sources
+                .retain(|source| source != &format!("counter:{removed_id}"));
             if settings.mac_os.status_item_source == format!("counter:{removed_id}") {
                 settings.mac_os.status_item_source = "day".into();
             }
@@ -1414,6 +1466,8 @@ mod tests {
                 "Decimal places",
                 "Accent",
                 "Menu-bar source",
+                "Reminder after",
+                "Check history",
                 "Theme",
                 "Motion",
             ]

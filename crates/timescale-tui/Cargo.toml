@@ -14,6 +14,7 @@ path = "src/main.rs"
 chrono.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tachyonfx.workspace = true
 timescale-core = { path = "../timescale-core" }

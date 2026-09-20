@@ -2,10 +2,11 @@ use std::env;
 use std::error::Error;
 use std::io::{self, stdout};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration as StdDuration, Instant};
 
-use chrono::{DateTime, Duration, Local};
+use chrono::{DateTime, Duration, Local, TimeZone, Timelike};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -17,11 +18,12 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Padding, Paragraph};
+use serde::Deserialize;
 use serde_json::json;
 use tachyonfx::{CellFilter, Duration as FxDuration, Effect, Interpolation, fx};
 use timescale_core::{
-    ConfigStore, CounterSettings, Period, QuarterCycle, Settings, Snapshot, TuiMotion, TuiTheme,
-    WeekStart, snapshot,
+    ConfigStore, CounterSettings, InteractionCheck, Period, QuarterCycle, Settings, Snapshot,
+    TuiMotion, TuiTheme, WeekStart, snapshot,
 };
 
 mod settings_ui;
@@ -29,6 +31,98 @@ mod settings_ui;
 use settings_ui::{MenuAction, SettingsMenu};
 
 const HOURGLASS_FRAMES: [&str; 4] = ["⣹⣏", "⠹⣆", "⡷⢾", "⣰⠏"];
+
+#[derive(Clone, Debug)]
+struct CalendarEvent {
+    id: i64,
+    title: String,
+    description: Option<String>,
+    edit_url: Option<String>,
+    start: DateTime<Local>,
+    end: DateTime<Local>,
+}
+
+impl CalendarEvent {
+    fn source(&self) -> String {
+        format!("hey-event:{}", self.id)
+    }
+
+    fn progress(&self, now: DateTime<Local>) -> f64 {
+        let duration = (self.end - self.start).num_milliseconds() as f64;
+        if duration <= 0.0 {
+            return f64::from(now >= self.end);
+        }
+        ((now - self.start).num_milliseconds() as f64 / duration).clamp(0.0, 1.0)
+    }
+}
+
+#[derive(Deserialize)]
+struct HeyEnvelope {
+    data: Vec<HeyEvent>,
+}
+
+#[derive(Deserialize)]
+struct HeyEvent {
+    id: i64,
+    title: Option<String>,
+    summary: Option<String>,
+    description: Option<String>,
+    edit_url: Option<String>,
+    starts_at: String,
+    ends_at: String,
+    all_day: Option<bool>,
+}
+
+struct HeyProvider {
+    current: Option<CalendarEvent>,
+    cached_events: Vec<CalendarEvent>,
+    receiver: Option<Receiver<Vec<CalendarEvent>>>,
+    last_refresh: Option<Instant>,
+}
+
+impl HeyProvider {
+    fn new() -> Self {
+        let mut provider = Self {
+            current: None,
+            cached_events: Vec::new(),
+            receiver: None,
+            last_refresh: None,
+        };
+        provider.refresh();
+        provider
+    }
+
+    fn update(&mut self, now: DateTime<Local>) {
+        if let Some(receiver) = &self.receiver
+            && let Ok(events) = receiver.try_recv()
+        {
+            self.cached_events = events;
+            self.receiver = None;
+        }
+        self.current = self
+            .cached_events
+            .iter()
+            .filter(|event| now >= event.start && now < event.end)
+            .min_by_key(|event| event.end)
+            .cloned();
+        if self.receiver.is_none()
+            && self
+                .last_refresh
+                .is_none_or(|last| last.elapsed() >= StdDuration::from_secs(5 * 60))
+        {
+            self.refresh();
+        }
+    }
+
+    fn refresh(&mut self) {
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(fetch_hey_events(Local::now()));
+        });
+        self.receiver = Some(receiver);
+        self.last_refresh = Some(Instant::now());
+    }
+}
 
 struct ParsedCli {
     config: Option<PathBuf>,
@@ -133,7 +227,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             Ok(())
         }
         None => {
-            let settings = store.load_or_create().map_err(other_error)?;
+            let mut settings = store.load_or_create().map_err(other_error)?;
+            let expected = settings.clone();
+            settings.record_check(InteractionCheck {
+                timestamp: Local::now().timestamp_millis() as f64 / 1000.0,
+                source: settings.mac_os.status_item_source.clone(),
+                app_name: env::var("TERM_PROGRAM")
+                    .ok()
+                    .or_else(|| Some("Terminal".into())),
+                bundle_identifier: None,
+            });
+            store
+                .save_if_unchanged(&settings, &expected)
+                .map_err(other_error)?;
             run_tui(&store, settings)
         }
     }
@@ -210,7 +316,7 @@ fn print_help() {
         "Timescale — see your time at a glance\n\n\
 Usage:\n  timescale [--config PATH]\n  timescale status [--json|--waybar]\n  \
 timescale config <path|show|edit>\n  timescale config set <KEY> <VALUE>\n  timescale doctor\n\n\
-The interactive view updates automatically. Use w to start/pause, [/] to select a counter, a to add, x to delete, r to reset, and e to edit settings.\n\
+The interactive view updates automatically. Use ↑/↓ to select, Enter to fold, s to select the status source, h for history, o to open a HEY event, w to start/pause, a to add, x to delete, r to reset, and e for settings.\n\
 Counter config keys include counter.add, counter.delete, and counter.<id>.name/targetMinutes/elapsedMinutes/startedAt."
     );
 }
@@ -221,9 +327,33 @@ fn print_status(
     waybar: bool,
 ) -> Result<(), Box<dyn Error>> {
     let settings = store.load_or_create().map_err(other_error)?;
-    let value = snapshot(&settings, Local::now()).map_err(other_error)?;
+    let now = Local::now();
+    let value = snapshot(&settings, now).map_err(other_error)?;
+    let current_event = fetch_hey_events(now)
+        .into_iter()
+        .filter(|event| now >= event.start && now < event.end)
+        .min_by_key(|event| event.end);
     if json_output {
-        println!("{}", serde_json::to_string_pretty(&value)?);
+        let mut output = serde_json::to_value(&value)?;
+        if let serde_json::Value::Object(object) = &mut output {
+            object.insert(
+                "currentEvent".into(),
+                current_event
+                    .as_ref()
+                    .map_or(serde_json::Value::Null, |event| {
+                        json!({
+                            "id": event.id,
+                            "title": event.title,
+                            "description": event.description,
+                            "editUrl": event.edit_url,
+                            "start": event.start.to_rfc3339(),
+                            "end": event.end.to_rfc3339(),
+                            "elapsed": event.progress(now),
+                        })
+                    }),
+            );
+        }
+        println!("{}", serde_json::to_string_pretty(&output)?);
     } else if waybar {
         let selected = settings.mac_os.status_item_source.as_str();
         let selected_counter = selected
@@ -280,10 +410,22 @@ fn print_status(
         } else {
             "late"
         };
+        let event_text = current_event.as_ref().map_or(String::new(), |event| {
+            format!("  📅 {:.0}%", event.progress(now) * 100.0)
+        });
+        let tooltip = if let Some(event) = &current_event {
+            format!(
+                "{tooltip}\n{}: {:.1}%",
+                event.title,
+                event.progress(now) * 100.0
+            )
+        } else {
+            tooltip
+        };
         println!(
             "{}",
             json!({
-                "text": format!("⌛ {:.0}%", percent),
+                "text": format!("⌛ {:.0}%{event_text}", percent),
                 "tooltip": tooltip,
                 "class": class,
                 "percentage": percent.round() as u8
@@ -341,6 +483,15 @@ fn print_status(
                 "Sunlight",
                 sunrise.format("%H:%M"),
                 sunset.format("%H:%M")
+            );
+        }
+        if let Some(event) = current_event {
+            println!(
+                "{:<16} {:>6.1}%  {} – {}",
+                event.title,
+                event.progress(now) * 100.0,
+                event.start.format("%H:%M"),
+                event.end.format("%H:%M")
             );
         }
     }
@@ -431,6 +582,10 @@ fn set_value(settings: &mut Settings, key: &str, value: &str) -> Result<(), Box<
         }
         "counter.delete" => {
             settings.counters.retain(|counter| counter.id != value);
+            settings
+                .awareness
+                .collapsed_sources
+                .retain(|source| source != &format!("counter:{value}"));
             if settings.mac_os.status_item_source == format!("counter:{value}") {
                 settings.mac_os.status_item_source = "day".into();
             }
@@ -497,6 +652,7 @@ fn set_value(settings: &mut Settings, key: &str, value: &str) -> Result<(), Box<
         "macOS.precision" => settings.mac_os.precision = value.parse()?,
         "macOS.showRemaining" => settings.mac_os.show_remaining = parse_bool(value)?,
         "macOS.statusItemSource" => settings.mac_os.status_item_source = value.into(),
+        "awareness.thresholdMinutes" => settings.awareness.threshold_minutes = value.parse()?,
         "tui.theme" => {
             settings.tui.theme = match value {
                 "auto" => TuiTheme::Auto,
@@ -592,14 +748,15 @@ fn tui_loop(
     let mut reload_error = None;
     let mut effects = TuiEffects::new(&settings);
     let mut settings_menu: Option<SettingsMenu> = None;
-    let mut selected_counter = 0usize;
+    let mut selected_source = 0usize;
+    let mut source_initialized = false;
+    let mut show_history = false;
+    let mut hey_provider = HeyProvider::new();
     loop {
         if last_reload.elapsed() >= StdDuration::from_millis(500) {
             match store.load() {
                 Ok(updated) => {
                     settings = updated;
-                    selected_counter =
-                        selected_counter.min(settings.counters.len().saturating_sub(1));
                     reload_error = None;
                 }
                 Err(error) => reload_error = Some(error),
@@ -607,6 +764,16 @@ fn tui_loop(
             last_reload = Instant::now();
         }
         let value = snapshot(&settings, Local::now()).map_err(other_error)?;
+        hey_provider.update(Local::now());
+        let sources = dashboard_sources(&value, hey_provider.current.as_ref());
+        if !source_initialized {
+            selected_source = sources
+                .iter()
+                .position(|source| source == &settings.mac_os.status_item_source)
+                .unwrap_or(0);
+            source_initialized = true;
+        }
+        selected_source = selected_source.min(sources.len().saturating_sub(1));
         let elapsed_millis = launched.elapsed().as_millis() as u64;
         let (animation_tick, poll_interval) = match settings.tui.motion {
             TuiMotion::Full => (elapsed_millis / 140, StdDuration::from_millis(50)),
@@ -616,14 +783,18 @@ fn tui_loop(
         effects.refresh_if_needed(&settings);
         let frame_elapsed = last_frame.elapsed();
         last_frame = Instant::now();
-        terminal.draw(|frame| match &settings_menu {
-            Some(menu) => menu.draw(frame, &settings, theme_palette(&settings)),
-            None => {
+        terminal.draw(|frame| {
+            if let Some(menu) = &settings_menu {
+                menu.draw(frame, &settings, theme_palette(&settings));
+            } else if show_history {
+                draw_history(frame, &settings);
+            } else {
                 draw(
                     frame,
                     &value,
                     &settings,
-                    selected_counter,
+                    sources.get(selected_source).map(String::as_str),
+                    hey_provider.current.as_ref(),
                     animation_tick,
                     reload_error.as_deref(),
                 );
@@ -643,15 +814,69 @@ fn tui_loop(
                     MenuAction::Quit => return Ok(()),
                 }
                 effects.refresh_if_needed(&settings);
+            } else if show_history {
+                match key.code {
+                    KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Esc | KeyCode::Char('h') => show_history = false,
+                    _ => {}
+                }
             } else {
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     KeyCode::Char('e') => settings_menu = Some(SettingsMenu::new()),
-                    KeyCode::Char('[') if !settings.counters.is_empty() => {
-                        selected_counter = selected_counter.saturating_sub(1);
+                    KeyCode::Char('h') => show_history = true,
+                    KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('[') => {
+                        selected_source = selected_source.saturating_sub(1);
                     }
-                    KeyCode::Char(']') if !settings.counters.is_empty() => {
-                        selected_counter = (selected_counter + 1).min(settings.counters.len() - 1);
+                    KeyCode::Down | KeyCode::Char('j') | KeyCode::Char(']') => {
+                        selected_source =
+                            (selected_source + 1).min(sources.len().saturating_sub(1));
+                    }
+                    KeyCode::Enter | KeyCode::Char(' ') if !sources.is_empty() => {
+                        let source = &sources[selected_source];
+                        let mut candidate = settings.clone();
+                        if let Some(index) = candidate
+                            .awareness
+                            .collapsed_sources
+                            .iter()
+                            .position(|value| value == source)
+                        {
+                            candidate.awareness.collapsed_sources.remove(index);
+                        } else {
+                            candidate.awareness.collapsed_sources.push(source.clone());
+                            candidate.awareness.collapsed_sources.sort();
+                            candidate.awareness.collapsed_sources.dedup();
+                        }
+                        if let Err(error) = store.save_if_unchanged(&candidate, &settings) {
+                            reload_error = Some(error);
+                        } else {
+                            settings = candidate;
+                        }
+                    }
+                    KeyCode::Char('s') if !sources.is_empty() => {
+                        let source = &sources[selected_source];
+                        if is_selectable_status_source(source, &value) {
+                            let mut candidate = settings.clone();
+                            candidate.mac_os.status_item_source = source.clone();
+                            if let Err(error) = store.save_if_unchanged(&candidate, &settings) {
+                                reload_error = Some(error);
+                            } else {
+                                settings = candidate;
+                            }
+                        }
+                    }
+                    KeyCode::Char('o') => {
+                        if sources
+                            .get(selected_source)
+                            .is_some_and(|source| source.starts_with("hey-event:"))
+                            && let Some(url) = hey_provider
+                                .current
+                                .as_ref()
+                                .and_then(|event| event.edit_url.as_deref())
+                            && let Err(error) = open_url(url)
+                        {
+                            reload_error = Some(error);
+                        }
                     }
                     KeyCode::Char('a') => {
                         let id = new_counter_id();
@@ -667,14 +892,22 @@ fn tui_loop(
                             reload_error = Some(error);
                         } else {
                             settings = candidate;
-                            selected_counter = settings.counters.len().saturating_sub(1);
+                            selected_source = settings.counters.len().saturating_sub(1);
                         }
                     }
                     KeyCode::Char('x') if !settings.counters.is_empty() => {
+                        let Some(remove_index) =
+                            selected_counter_index(&sources, selected_source, &settings)
+                        else {
+                            continue;
+                        };
                         let mut candidate = settings.clone();
-                        let remove_index = selected_counter.min(candidate.counters.len() - 1);
                         let removed_id = candidate.counters[remove_index].id.clone();
                         candidate.counters.remove(remove_index);
+                        candidate
+                            .awareness
+                            .collapsed_sources
+                            .retain(|source| source != &format!("counter:{removed_id}"));
                         if candidate.mac_os.status_item_source == format!("counter:{removed_id}") {
                             candidate.mac_os.status_item_source = "day".into();
                         }
@@ -682,22 +915,28 @@ fn tui_loop(
                             reload_error = Some(error);
                         } else {
                             settings = candidate;
-                            selected_counter =
-                                selected_counter.min(settings.counters.len().saturating_sub(1));
+                            selected_source = selected_source.min(sources.len().saturating_sub(1));
                         }
                     }
                     KeyCode::Char('w') => {
                         let result = if settings.counters.is_empty() {
                             toggle_routine(&mut settings, store, Local::now())
+                        } else if let Some(counter_index) =
+                            selected_counter_index(&sources, selected_source, &settings)
+                        {
+                            toggle_counter(&mut settings, store, counter_index, Local::now())
                         } else {
-                            toggle_counter(&mut settings, store, selected_counter, Local::now())
+                            Ok(())
                         };
                         if let Err(error) = result {
                             reload_error = Some(error);
                         }
                     }
                     KeyCode::Char('r') if !settings.counters.is_empty() => {
-                        if let Err(error) = reset_counter(&mut settings, store, selected_counter) {
+                        if let Some(index) =
+                            selected_counter_index(&sources, selected_source, &settings)
+                            && let Err(error) = reset_counter(&mut settings, store, index)
+                        {
                             reload_error = Some(error);
                         }
                     }
@@ -793,11 +1032,297 @@ fn counter_elapsed(counter: &CounterSettings, now: DateTime<Local>) -> Result<f6
     )
 }
 
+fn period_source(period: Period) -> &'static str {
+    match period {
+        Period::Day => "day",
+        Period::Week => "week",
+        Period::Month => "month",
+        Period::Quarter => "quarter",
+        Period::Year => "year",
+        Period::Life => "life",
+    }
+}
+
+fn dashboard_sources(snapshot: &Snapshot, event: Option<&CalendarEvent>) -> Vec<String> {
+    let mut sources = snapshot
+        .counters
+        .iter()
+        .map(|counter| format!("counter:{}", counter.id))
+        .collect::<Vec<_>>();
+    sources.extend(
+        snapshot
+            .rows
+            .iter()
+            .map(|row| period_source(row.period).to_string()),
+    );
+    if let Some(event) = event {
+        sources.push(event.source());
+    }
+    sources
+}
+
+fn selected_counter_index(
+    sources: &[String],
+    selected: usize,
+    settings: &Settings,
+) -> Option<usize> {
+    let id = sources.get(selected)?.strip_prefix("counter:")?;
+    settings
+        .counters
+        .iter()
+        .position(|counter| counter.id == id)
+}
+
+fn is_selectable_status_source(source: &str, snapshot: &Snapshot) -> bool {
+    if source.starts_with("hey-event:") {
+        return false;
+    }
+    source != "life"
+        || snapshot
+            .rows
+            .iter()
+            .find(|row| row.period == Period::Life)
+            .is_some_and(|row| !row.start.is_empty())
+}
+
+fn append_awareness_summary<'a>(
+    lines: &mut Vec<Line<'a>>,
+    settings: &Settings,
+    width: usize,
+    muted: Color,
+) {
+    let today = Local::now().date_naive();
+    let checks = settings
+        .awareness
+        .checks
+        .iter()
+        .filter(|check| {
+            Local
+                .timestamp_millis_opt((check.timestamp * 1000.0) as i64)
+                .single()
+                .is_some_and(|date| date.date_naive() == today)
+        })
+        .collect::<Vec<_>>();
+    if checks.is_empty() {
+        return;
+    }
+    let (label, detail) = if checks.len() == 1 {
+        (
+            "First check today".to_string(),
+            "0% since a prior check".to_string(),
+        )
+    } else {
+        let latest = checks[checks.len() - 1];
+        let previous = checks[checks.len() - 2];
+        let seconds = (latest.timestamp - previous.timestamp).max(0.0);
+        let day_minutes =
+            day_duration_minutes(&settings.day.start, &settings.day.end).max(1) as f64;
+        (
+            format!("{} checks today", checks.len()),
+            format!(
+                "{} · {:.1}% since last check",
+                duration_label(seconds),
+                (seconds / (day_minutes * 60.0) * 100.0).clamp(0.0, 100.0)
+            ),
+        )
+    };
+    lines.push(Line::from(Span::styled(
+        align(&label, &detail, width),
+        Style::default().fg(muted),
+    )));
+    if checks.len() > 1 {
+        let latest = checks[checks.len() - 1];
+        let previous = checks[checks.len() - 2];
+        if latest.timestamp - previous.timestamp
+            >= f64::from(settings.awareness.threshold_minutes) * 60.0
+        {
+            lines.push(Line::from(Span::styled(
+                "⚠ Longer than your reminder interval",
+                Style::default().fg(Color::Yellow),
+            )));
+        }
+    }
+    lines.push(Line::default());
+}
+
+fn day_duration_minutes(start: &str, end: &str) -> u32 {
+    let parse = |value: &str| {
+        value.split_once(':').and_then(|(hour, minute)| {
+            Some(hour.parse::<u32>().ok()? * 60 + minute.parse::<u32>().ok()?)
+        })
+    };
+    match (parse(start), parse(end)) {
+        (Some(start), Some(end)) if end > start => end - start,
+        (Some(start), Some(end)) => 24 * 60 - start + end,
+        _ => 24 * 60,
+    }
+}
+
+fn draw_history(frame: &mut ratatui::Frame<'_>, settings: &Settings) {
+    let area = frame.area();
+    let palette = theme_palette(settings);
+    let today = Local::now().date_naive();
+    let checks = settings
+        .awareness
+        .checks
+        .iter()
+        .filter_map(|check| {
+            let date = Local
+                .timestamp_millis_opt((check.timestamp * 1000.0) as i64)
+                .single()?;
+            (date.date_naive() == today).then_some((check, date))
+        })
+        .collect::<Vec<_>>();
+    let average = if checks.len() > 1 {
+        let total = checks
+            .windows(2)
+            .map(|pair| pair[1].0.timestamp - pair[0].0.timestamp)
+            .sum::<f64>();
+        duration_label(total / (checks.len() - 1) as f64)
+    } else {
+        "—".into()
+    };
+    let mut hourly = [0usize; 24];
+    for (_, date) in &checks {
+        hourly[date.hour() as usize] += 1;
+    }
+    let maximum = hourly.iter().copied().max().unwrap_or(1).max(1);
+    let chart = hourly
+        .iter()
+        .map(|count| match count * 4 / maximum {
+            0 if *count == 0 => '·',
+            0 | 1 => '▂',
+            2 => '▄',
+            3 => '▆',
+            _ => '█',
+        })
+        .collect::<String>();
+    let mut app_counts = std::collections::HashMap::<&str, usize>::new();
+    for (check, _) in &checks {
+        if let Some(name) = check.app_name.as_deref() {
+            *app_counts.entry(name).or_default() += 1;
+        }
+    }
+    let mut apps = app_counts.into_iter().collect::<Vec<_>>();
+    apps.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "Today’s checks",
+            Style::default()
+                .fg(palette.primary)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(format!(
+            "{} times opened  ·  Average gap {average}",
+            checks.len()
+        )),
+        Line::default(),
+        Line::from(Span::styled(
+            "Check-ins by hour",
+            Style::default()
+                .fg(palette.primary)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(chart, Style::default().fg(palette.accent))),
+        Line::from(Span::styled(
+            "12 AM    6 AM     Noon     6 PM",
+            Style::default().fg(palette.muted),
+        )),
+    ];
+    if !apps.is_empty() {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            "Frontmost apps at check-in",
+            Style::default()
+                .fg(palette.primary)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(
+            apps.into_iter()
+                .take(4)
+                .map(|(name, count)| format!("{name} {count}"))
+                .collect::<Vec<_>>()
+                .join("  ·  "),
+        ));
+    }
+    lines.push(Line::default());
+    lines.push(Line::from(Span::styled(
+        "Check history",
+        Style::default()
+            .fg(palette.primary)
+            .add_modifier(Modifier::BOLD),
+    )));
+    let available = area.height.saturating_sub(lines.len() as u16 + 4) as usize;
+    for (index, (check, date)) in checks.iter().enumerate().rev().take(available) {
+        let interval = if index == 0 {
+            "First today".into()
+        } else {
+            format!(
+                "After {}",
+                duration_label(check.timestamp - checks[index - 1].0.timestamp)
+            )
+        };
+        let source = source_name(&check.source, settings);
+        let app = check
+            .app_name
+            .as_deref()
+            .map_or(String::new(), |name| format!(" · {name}"));
+        lines.push(Line::from(vec![
+            Span::styled(
+                date.format("%H:%M").to_string(),
+                Style::default().fg(palette.primary),
+            ),
+            Span::styled(
+                format!("  {source}{app}"),
+                Style::default().fg(palette.muted),
+            ),
+            Span::raw("  "),
+            Span::styled(interval, Style::default().fg(palette.muted)),
+        ]));
+    }
+    lines.push(Line::default());
+    lines.push(Line::from(Span::styled(
+        "h/Esc back · q quit",
+        Style::default().fg(palette.muted),
+    )));
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .title(" history ")
+                .borders(Borders::ALL)
+                .padding(Padding::uniform(1)),
+        ),
+        area,
+    );
+}
+
+fn source_name(source: &str, settings: &Settings) -> String {
+    if let Some(id) = source.strip_prefix("counter:") {
+        return settings
+            .counters
+            .iter()
+            .find(|counter| counter.id == id)
+            .map(|counter| counter.name.clone())
+            .unwrap_or_else(|| "Deleted counter".into());
+    }
+    match source {
+        "day" => "Day",
+        "week" => "Week",
+        "month" => "Month",
+        "quarter" => "Quarter",
+        "year" => "Year",
+        "life" => "Life",
+        _ => "Unknown",
+    }
+    .into()
+}
+
 fn draw(
     frame: &mut ratatui::Frame<'_>,
     snapshot: &Snapshot,
     settings: &Settings,
-    selected_counter: usize,
+    selected_source: Option<&str>,
+    calendar_event: Option<&CalendarEvent>,
     animation_tick: u64,
     reload_error: Option<&str>,
 ) {
@@ -824,7 +1349,9 @@ fn draw(
         Line::default(),
     ];
 
-    for (index, counter) in snapshot.counters.iter().enumerate() {
+    for counter in &snapshot.counters {
+        let source = format!("counter:{}", counter.id);
+        let collapsed = settings.awareness.collapsed_sources.contains(&source);
         let percentage = format!(
             "{:.*}%",
             settings.mac_os.precision as usize,
@@ -837,20 +1364,28 @@ fn draw(
         } else {
             "Paused".into()
         };
-        let marker = if index == selected_counter {
+        let marker = if selected_source == Some(source.as_str()) {
             "▶ "
         } else {
             "  "
         };
+        let fold = if collapsed { "▸ " } else { "▾ " };
+        let status = if settings.mac_os.status_item_source == source {
+            " ★"
+        } else {
+            ""
+        };
         lines.push(Line::from(vec![
-            Span::styled(format!("{marker}{}", counter.name), title_style),
+            Span::styled(format!("{marker}{fold}{}", counter.name), title_style),
             Span::raw("  "),
             Span::styled(remaining, Style::default().fg(muted)),
             Span::raw(" ".repeat(4)),
-            Span::styled(percentage, title_style),
+            Span::styled(format!("{percentage}{status}"), title_style),
         ]));
-        lines.push(progress_line(counter.elapsed, None, width, accent, muted));
-        if !compact {
+        if !collapsed {
+            lines.push(progress_line(counter.elapsed, None, width, accent, muted));
+        }
+        if !compact && !collapsed {
             lines.push(Line::default());
         }
     }
@@ -904,11 +1439,28 @@ fn draw(
     }
 
     for row in &snapshot.rows {
+        let source = period_source(row.period);
+        let collapsed = settings
+            .awareness
+            .collapsed_sources
+            .iter()
+            .any(|value| value == source);
+        let selection = if selected_source == Some(source) {
+            "▶ "
+        } else {
+            "  "
+        };
+        let fold = if collapsed { "▸ " } else { "▾ " };
+        let status = if settings.mac_os.status_item_source == source {
+            " ★"
+        } else {
+            ""
+        };
         if row.period == Period::Life && row.start.is_empty() {
             let message = "Set a birth date in settings";
             let padding = width.saturating_sub("Life".len() + message.len());
             lines.push(Line::from(vec![
-                Span::styled("Life", title_style),
+                Span::styled(format!("{selection}{fold}Life"), title_style),
                 Span::raw(" ".repeat(padding.max(1))),
                 Span::styled(message, Style::default().fg(muted)),
             ]));
@@ -939,8 +1491,14 @@ fn draw(
         } else {
             detail.chars().count() + 2
         };
-        let left_width = row.title.chars().count() + detail_width + remaining.chars().count() + 2;
-        let right_width = equivalence.chars().count() + percentage.chars().count() + 2;
+        let left_width = selection.chars().count()
+            + fold.chars().count()
+            + row.title.chars().count()
+            + detail_width
+            + remaining.chars().count()
+            + 2;
+        let right_width =
+            equivalence.chars().count() + percentage.chars().count() + status.chars().count() + 2;
         let left = if detail.is_empty() {
             format!("{}  {remaining}", row.title)
         } else {
@@ -951,7 +1509,10 @@ fn draw(
         if metadata_fits {
             let supporting = Style::default().fg(muted);
             let padding = width.saturating_sub(left_width + right_width);
-            let mut spans = vec![Span::styled(row.title.clone(), title_style)];
+            let mut spans = vec![Span::styled(
+                format!("{selection}{fold}{}", row.title),
+                title_style,
+            )];
             if !detail.is_empty() {
                 spans.push(Span::raw("  "));
                 spans.push(Span::styled(detail, supporting));
@@ -961,13 +1522,20 @@ fn draw(
             spans.push(Span::raw(" ".repeat(padding.max(1))));
             spans.push(Span::styled(equivalence.clone(), supporting));
             spans.push(Span::raw("  "));
-            spans.push(Span::styled(percentage.clone(), title_style));
+            spans.push(Span::styled(format!("{percentage}{status}"), title_style));
             lines.push(Line::from(spans));
         } else {
             lines.push(Line::from(Span::styled(
-                align(&row.title, &percentage, width),
+                align(
+                    &format!("{selection}{fold}{}", row.title),
+                    &format!("{percentage}{status}"),
+                    width,
+                ),
                 title_style,
             )));
+        }
+        if collapsed {
+            continue;
         }
         if !compact {
             lines.push(Line::default());
@@ -1030,10 +1598,73 @@ fn draw(
         }
     }
 
-    let routine_action = match snapshot.counters.get(selected_counter) {
+    if let Some(event) = calendar_event {
+        let source = event.source();
+        let selected = selected_source == Some(source.as_str());
+        let collapsed = settings.awareness.collapsed_sources.contains(&source);
+        let elapsed = event.progress(Local::now());
+        let remaining = (event.end - Local::now()).num_seconds().max(0) as f64;
+        let event_percentage = format!(
+            "{:.*}%",
+            settings.mac_os.precision as usize,
+            elapsed * 100.0
+        );
+        let prefix = format!(
+            "{}{}",
+            if selected { "▶ " } else { "  " },
+            if collapsed { "▸ " } else { "▾ " }
+        );
+        let available_title =
+            width.saturating_sub(prefix.chars().count() + event_percentage.chars().count() + 1);
+        let display_title = truncate_text(&event.title, available_title);
+        let event_padding = width.saturating_sub(
+            prefix.chars().count()
+                + display_title.chars().count()
+                + event_percentage.chars().count(),
+        );
+        lines.push(Line::from(vec![
+            Span::styled(format!("{prefix}{display_title}"), title_style),
+            Span::raw(" ".repeat(event_padding.max(1))),
+            Span::styled(event_percentage, title_style),
+        ]));
+        lines.push(Line::from(Span::styled(
+            format!("HEY event · {} left", duration_label(remaining)),
+            Style::default().fg(muted),
+        )));
+        if !collapsed {
+            lines.push(Line::from(Span::styled(
+                align(
+                    &event.start.format("%H:%M").to_string(),
+                    &event.end.format("%H:%M").to_string(),
+                    width,
+                ),
+                Style::default().fg(muted),
+            )));
+            lines.push(progress_line(elapsed, None, width, accent, muted));
+            if let Some(description) = event
+                .description
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
+                lines.push(Line::from(Span::styled(
+                    description,
+                    Style::default().fg(muted),
+                )));
+            }
+        }
+        lines.push(Line::default());
+    }
+
+    append_awareness_summary(&mut lines, settings, width, muted);
+
+    let selected_counter = selected_source
+        .and_then(|source| source.strip_prefix("counter:"))
+        .and_then(|id| snapshot.counters.iter().find(|counter| counter.id == id));
+    let routine_action = match selected_counter {
         Some(counter) if counter.complete => format!("w restart {}", counter.name),
         Some(counter) if counter.running => format!("w pause {}", counter.name),
         Some(counter) => format!("w start {}", counter.name),
+        None if !snapshot.counters.is_empty() => "select a counter for w".into(),
         None => match &snapshot.routine {
             Some(routine) if routine.complete => format!("w restart {}", routine.name),
             Some(routine) => format!("w stop {}", routine.name),
@@ -1041,9 +1672,13 @@ fn draw(
         },
     };
     let footer_left = reload_error.map_or_else(
-        || format!("{routine_action} · [/] select · a add · x delete · r reset · e edit"),
+        || {
+            format!(
+                "{routine_action} · ↑/↓ select · Enter fold · s status · h history · e settings"
+            )
+        },
         |error| {
-            format!("{routine_action} · [/] select · a add · x delete · r reset · e edit · {error}")
+            format!("{routine_action} · ↑/↓ select · Enter fold · s status · h history · {error}")
         },
     );
     lines.push(Line::from(Span::styled(
@@ -1165,6 +1800,20 @@ fn align(left: &str, right: &str, width: usize) -> String {
     format!("{left}{}{right}", " ".repeat(padding.max(1)))
 }
 
+fn truncate_text(value: &str, width: usize) -> String {
+    if value.chars().count() <= width {
+        return value.to_string();
+    }
+    if width <= 1 {
+        return "…".chars().take(width).collect();
+    }
+    value
+        .chars()
+        .take(width - 1)
+        .chain(std::iter::once('…'))
+        .collect()
+}
+
 fn duration_label(seconds: f64) -> String {
     let seconds = seconds.max(0.0);
     if seconds < 120.0 {
@@ -1197,6 +1846,98 @@ fn parse_date(value: &str) -> Result<DateTime<Local>, Box<dyn Error>> {
     Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Local))
 }
 
+fn fetch_hey_events(now: DateTime<Local>) -> Vec<CalendarEvent> {
+    let Some(executable) = hey_executable() else {
+        return Vec::new();
+    };
+    let output = Command::new(executable)
+        .args([
+            "event",
+            "list",
+            "--starts-on",
+            &(now - Duration::days(1)).format("%Y-%m-%d").to_string(),
+            "--ends-on",
+            &(now + Duration::days(1)).format("%Y-%m-%d").to_string(),
+            "--all",
+            "--json",
+        ])
+        .stderr(Stdio::null())
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    parse_hey_events(&output.stdout)
+}
+
+fn parse_hey_events(data: &[u8]) -> Vec<CalendarEvent> {
+    let Ok(envelope) = serde_json::from_slice::<HeyEnvelope>(data) else {
+        return Vec::new();
+    };
+    envelope
+        .data
+        .into_iter()
+        .filter(|event| event.all_day != Some(true))
+        .filter_map(|event| {
+            let start = DateTime::parse_from_rfc3339(&event.starts_at)
+                .ok()?
+                .with_timezone(&Local);
+            let end = DateTime::parse_from_rfc3339(&event.ends_at)
+                .ok()?
+                .with_timezone(&Local);
+            (end > start).then_some(CalendarEvent {
+                id: event.id,
+                title: event
+                    .title
+                    .or(event.summary)
+                    .unwrap_or_else(|| "Untitled event".into()),
+                description: event.description,
+                edit_url: event.edit_url,
+                start,
+                end,
+            })
+        })
+        .collect()
+}
+
+fn hey_executable() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(home) = env::var_os("HOME") {
+        candidates.push(PathBuf::from(home).join(".local/bin/hey"));
+    }
+    candidates.push(PathBuf::from("/opt/homebrew/bin/hey"));
+    candidates.push(PathBuf::from("/usr/local/bin/hey"));
+    if let Some(path) = env::var_os("PATH") {
+        candidates.extend(
+            env::split_paths(&path)
+                .map(|directory| directory.join(if cfg!(windows) { "hey.exe" } else { "hey" })),
+        );
+    }
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+fn open_url(url: &str) -> Result<(), String> {
+    let (program, arguments): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
+        ("open", vec![url])
+    } else if cfg!(windows) {
+        ("rundll32", vec!["url.dll,FileProtocolHandler", url])
+    } else {
+        ("xdg-open", vec![url])
+    };
+    let mut child = Command::new(program)
+        .args(arguments)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("Could not open event: {error}"))?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 fn other_error(message: String) -> Box<dyn Error> {
     Box::new(io::Error::other(message))
 }
@@ -1207,6 +1948,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use chrono::TimeZone;
+    use ratatui::backend::TestBackend;
 
     use super::*;
 
@@ -1215,6 +1957,80 @@ mod tests {
         assert_eq!(duration_label(90.0), "90 sec");
         assert_eq!(duration_label(3_600.0), "1h");
         assert_eq!(duration_label(9_000.0), "2h 30m");
+    }
+
+    #[test]
+    fn long_event_titles_fit_the_available_width() {
+        assert_eq!(truncate_text("Calendar focus session", 10), "Calendar …");
+        assert_eq!(truncate_text("Focus", 10), "Focus");
+    }
+
+    #[test]
+    fn dashboard_marks_the_selected_status_source_and_collapsed_rows() {
+        let mut settings = Settings::default();
+        settings.awareness.collapsed_sources.push("day".into());
+        let value = snapshot(&settings, Local::now()).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &value, &settings, Some("day"), None, 0, None))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let rendered = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(rendered.contains("▶ ▸ Day"));
+        assert!(rendered.contains('★'));
+    }
+
+    #[test]
+    fn status_selection_excludes_events_and_an_unconfigured_life() {
+        let mut settings = Settings::default();
+        let now = Local
+            .with_ymd_and_hms(2026, 9, 20, 12, 0, 0)
+            .single()
+            .unwrap();
+        let value = snapshot(&settings, now).unwrap();
+        assert!(!is_selectable_status_source("life", &value));
+        assert!(!is_selectable_status_source("hey-event:7", &value));
+
+        settings.life.birth_date = Some("1990-01-01".into());
+        let value = snapshot(&settings, now).unwrap();
+        assert!(is_selectable_status_source("life", &value));
+    }
+
+    #[test]
+    fn hey_provider_selects_the_next_cached_event_without_refetching() {
+        let first_start = Local
+            .with_ymd_and_hms(2026, 9, 20, 9, 0, 0)
+            .single()
+            .unwrap();
+        let second_start = first_start + Duration::hours(1);
+        let event = |id, title: &str, start| CalendarEvent {
+            id,
+            title: title.into(),
+            description: None,
+            edit_url: None,
+            start,
+            end: start + Duration::hours(1),
+        };
+        let mut provider = HeyProvider {
+            current: None,
+            cached_events: vec![
+                event(1, "First", first_start),
+                event(2, "Second", second_start),
+            ],
+            receiver: None,
+            last_refresh: Some(Instant::now()),
+        };
+        provider.update(first_start + Duration::minutes(30));
+        assert_eq!(provider.current.as_ref().map(|event| event.id), Some(1));
+        provider.update(second_start + Duration::minutes(30));
+        assert_eq!(provider.current.as_ref().map(|event| event.id), Some(2));
     }
 
     #[test]
@@ -1233,6 +2049,30 @@ mod tests {
             .count();
         assert_eq!(daylight, 10);
         assert!(!line.spans.iter().any(|span| span.content.as_ref() == "█"));
+    }
+
+    #[test]
+    fn hey_payload_keeps_timed_events_and_the_edit_link() {
+        let events = parse_hey_events(
+            br#"{"data":[{"id":7,"title":"Focus","summary":null,"description":"Deep work","edit_url":"https://app.hey.com/calendar/events/7","starts_at":"2026-09-20T09:00:00+09:00","ends_at":"2026-09-20T10:00:00+09:00","all_day":false},{"id":8,"title":"Holiday","summary":null,"description":null,"edit_url":null,"starts_at":"2026-09-20T00:00:00+09:00","ends_at":"2026-09-21T00:00:00+09:00","all_day":true}]}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].title, "Focus");
+        assert_eq!(
+            events[0].edit_url.as_deref(),
+            Some("https://app.hey.com/calendar/events/7")
+        );
+        let halfway = DateTime::parse_from_rfc3339("2026-09-20T09:30:00+09:00")
+            .unwrap()
+            .with_timezone(&Local);
+        assert!((events[0].progress(halfway) - 0.5).abs() < 0.0001);
+    }
+
+    #[test]
+    fn waking_day_percentage_supports_overnight_schedules() {
+        assert_eq!(day_duration_minutes("08:00", "23:00"), 15 * 60);
+        assert_eq!(day_duration_minutes("22:00", "06:00"), 8 * 60);
+        assert_eq!(day_duration_minutes("08:00", "08:00"), 24 * 60);
     }
 
     #[test]
