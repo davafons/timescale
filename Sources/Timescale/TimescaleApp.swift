@@ -106,13 +106,11 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     let defaults = UserDefaults.standard
     let now = Date().timeIntervalSince1970
     let activeApplication = NSWorkspace.shared.frontmostApplication
-    InteractionHistory.record(
-      now,
+    sharedSettings.recordCheck(
+      at: now,
       source: defaults.string(forKey: SettingsKey.statusItemSource) ?? "day",
       appName: activeApplication?.localizedName,
-      bundleIdentifier: activeApplication?.bundleIdentifier,
-      in: defaults)
-    defaults.set(now, forKey: SettingsKey.lastInteractionTimestamp)
+      bundleIdentifier: activeApplication?.bundleIdentifier)
     showPopover(checkTimestamp: now)
   }
 

@@ -53,6 +53,23 @@ final class SharedSettingsCoordinator {
     }
   }
 
+  func recordCheck(
+    at timestamp: TimeInterval,
+    source: String,
+    appName: String?,
+    bundleIdentifier: String?
+  ) {
+    InteractionHistory.record(
+      timestamp,
+      source: source,
+      appName: appName,
+      bundleIdentifier: bundleIdentifier,
+      in: defaults)
+    defaults.set(timestamp, forKey: SettingsKey.lastInteractionTimestamp)
+    suppressDefaultsUntil = .distantPast
+    exportNow()
+  }
+
   private func defaultsDidChange() {
     guard Date() >= suppressDefaultsUntil else { return }
     exportWorkItem?.cancel()
