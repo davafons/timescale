@@ -194,6 +194,8 @@ struct ProgressPopover: View {
           }
         }
 
+        Divider()
+
         HStack {
           Button {
             SettingsWindowController.shared.show()

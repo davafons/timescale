@@ -215,7 +215,7 @@ struct SettingsView: View {
             step: 5
           )
           Text(
-            "Opening the menu-bar popover counts as a check. The most recent \(InteractionHistory.maximumCount) checks stay on this Mac."
+            "Opening the menu-bar popover or terminal interface counts as a check. The most recent \(InteractionHistory.maximumCount) checks stay local and are shared between both interfaces."
           )
           .font(TypographyScale.detail)
           .foregroundStyle(.secondary)

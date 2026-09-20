@@ -48,13 +48,13 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     }
 
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-      self?.showPopover()
+      self?.recordCheckAndShowPopover()
     }
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {
-    showPopover()
+    recordCheckAndShowPopover()
     return true
   }
 
@@ -99,6 +99,10 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
       return
     }
 
+    recordCheckAndShowPopover()
+  }
+
+  private func recordCheckAndShowPopover() {
     let defaults = UserDefaults.standard
     let now = Date().timeIntervalSince1970
     let activeApplication = NSWorkspace.shared.frontmostApplication

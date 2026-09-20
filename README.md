@@ -106,7 +106,9 @@ Running `timescale` opens the live TUI. It refreshes progress and shared setting
 - Enter or Space on the dashboard: collapse or expand the selected source
 - `s` on the dashboard: use the selected source for status integrations and the Mac menu bar
 - `h` on the dashboard: open check-in history
+- Page Up/Page Down on the dashboard or history: scroll; Home returns to the top
 - `o` on a selected HEY event: open the event in HEY
+- `a` on the dashboard: add a counter; `w`, `r`, and `x` operate on the selected counter
 - Escape: cancel an edit or return to the dashboard
 - `q`: quit from either screen
 

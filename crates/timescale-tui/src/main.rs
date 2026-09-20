@@ -227,22 +227,33 @@ fn main() -> Result<(), Box<dyn Error>> {
             Ok(())
         }
         None => {
-            let mut settings = store.load_or_create().map_err(other_error)?;
-            let expected = settings.clone();
-            settings.record_check(InteractionCheck {
-                timestamp: Local::now().timestamp_millis() as f64 / 1000.0,
-                source: settings.mac_os.status_item_source.clone(),
-                app_name: env::var("TERM_PROGRAM")
-                    .ok()
-                    .or_else(|| Some("Terminal".into())),
-                bundle_identifier: None,
-            });
-            store
-                .save_if_unchanged(&settings, &expected)
-                .map_err(other_error)?;
+            let settings = record_tui_check(&store).map_err(other_error)?;
             run_tui(&store, settings)
         }
     }
+}
+
+fn record_tui_check(store: &ConfigStore) -> Result<Settings, String> {
+    let timestamp = Local::now().timestamp_millis() as f64 / 1000.0;
+    let app_name = env::var("TERM_PROGRAM")
+        .ok()
+        .or_else(|| Some("Terminal".into()));
+    for _ in 0..3 {
+        let mut settings = store.load_or_create()?;
+        let expected = settings.clone();
+        settings.record_check(InteractionCheck {
+            timestamp,
+            source: settings.mac_os.status_item_source.clone(),
+            app_name: app_name.clone(),
+            bundle_identifier: None,
+        });
+        match store.save_if_unchanged(&settings, &expected) {
+            Ok(()) => return Ok(settings),
+            Err(error) if error == "configuration changed externally; reload before saving" => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err("configuration kept changing externally; could not record this check-in".into())
 }
 
 fn parse_cli() -> Result<ParsedCli, Box<dyn Error>> {
@@ -316,7 +327,7 @@ fn print_help() {
         "Timescale — see your time at a glance\n\n\
 Usage:\n  timescale [--config PATH]\n  timescale status [--json|--waybar]\n  \
 timescale config <path|show|edit>\n  timescale config set <KEY> <VALUE>\n  timescale doctor\n\n\
-The interactive view updates automatically. Use ↑/↓ to select, Enter to fold, s to select the status source, h for history, o to open a HEY event, w to start/pause, a to add, x to delete, r to reset, and e for settings.\n\
+The interactive view updates automatically. Use ↑/↓ to select, Page Up/Page Down to scroll, Enter to fold, s to select the status source, h for history, o to open a HEY event, w to start/pause, a to add, x to delete, r to reset, and e for settings.\n\
 Counter config keys include counter.add, counter.delete, and counter.<id>.name/targetMinutes/elapsedMinutes/startedAt."
     );
 }
@@ -395,13 +406,13 @@ fn print_status(
         let tooltip = if counter_tooltip.is_empty() {
             value.routine.as_ref().map_or(tooltip.clone(), |routine| {
                 format!(
-                    "{}: {:.1}%\n{tooltip}",
+                    "{tooltip}\n{}: {:.1}%",
                     routine.name,
                     routine.elapsed * 100.0
                 )
             })
         } else {
-            format!("{counter_tooltip}\n{tooltip}")
+            format!("{tooltip}\n{counter_tooltip}")
         };
         let class = if percent < 33.0 {
             "early"
@@ -433,33 +444,7 @@ fn print_status(
         );
     } else {
         println!("Timescale · {}", Local::now().format("%A, %b %-d · %H:%M"));
-        for counter in &value.counters {
-            println!(
-                "{:<16} {:>6.1}%  {}",
-                counter.name,
-                counter.elapsed * 100.0,
-                if counter.complete {
-                    "complete".into()
-                } else if counter.running {
-                    format!("{} left", duration_label(counter.remaining_seconds))
-                } else {
-                    "paused".into()
-                }
-            );
-        }
-        if let Some(routine) = value.routine {
-            println!(
-                "{:<16} {:>6.1}%  {}",
-                routine.name,
-                routine.elapsed * 100.0,
-                if routine.complete {
-                    "complete".into()
-                } else {
-                    format!("{} left", duration_label(routine.remaining_seconds))
-                }
-            );
-        }
-        for row in value.rows {
+        for row in &value.rows {
             if row.period == Period::Life && row.start.is_empty() {
                 println!(
                     "{:<16} {}",
@@ -474,15 +459,43 @@ fn print_status(
                     duration_label(row.remaining_seconds)
                 );
             }
+            if row.period == Period::Day
+                && let Some(solar) = &value.solar
+            {
+                let sunrise = parse_date(&solar.sunrise)?;
+                let sunset = parse_date(&solar.sunset)?;
+                println!(
+                    "{:<16} {} – {}",
+                    "Sunlight",
+                    sunrise.format("%H:%M"),
+                    sunset.format("%H:%M")
+                );
+            }
         }
-        if let Some(solar) = value.solar {
-            let sunrise = parse_date(&solar.sunrise)?;
-            let sunset = parse_date(&solar.sunset)?;
+        for counter in &value.counters {
             println!(
-                "{:<16} {} – {}",
-                "Sunlight",
-                sunrise.format("%H:%M"),
-                sunset.format("%H:%M")
+                "{:<16} {:>6.1}%  {}",
+                counter.name,
+                counter.elapsed * 100.0,
+                if counter.complete {
+                    "complete".into()
+                } else if counter.running {
+                    format!("{} left", duration_label(counter.remaining_seconds))
+                } else {
+                    "paused".into()
+                }
+            );
+        }
+        if let Some(routine) = &value.routine {
+            println!(
+                "{:<16} {:>6.1}%  {}",
+                routine.name,
+                routine.elapsed * 100.0,
+                if routine.complete {
+                    "complete".into()
+                } else {
+                    format!("{} left", duration_label(routine.remaining_seconds))
+                }
             );
         }
         if let Some(event) = current_event {
@@ -751,6 +764,8 @@ fn tui_loop(
     let mut selected_source = 0usize;
     let mut source_initialized = false;
     let mut show_history = false;
+    let mut dashboard_scroll = 0u16;
+    let mut history_scroll = 0u16;
     let mut hey_provider = HeyProvider::new();
     loop {
         if last_reload.elapsed() >= StdDuration::from_millis(500) {
@@ -787,15 +802,18 @@ fn tui_loop(
             if let Some(menu) = &settings_menu {
                 menu.draw(frame, &settings, theme_palette(&settings));
             } else if show_history {
-                draw_history(frame, &settings);
+                history_scroll = draw_history(frame, &settings, history_scroll);
             } else {
-                draw(
+                dashboard_scroll = draw(
                     frame,
                     &value,
                     &settings,
                     sources.get(selected_source).map(String::as_str),
                     hey_provider.current.as_ref(),
-                    animation_tick,
+                    DashboardViewport {
+                        animation_tick,
+                        scroll: dashboard_scroll,
+                    },
                     reload_error.as_deref(),
                 );
                 effects.render(frame, frame_elapsed);
@@ -818,13 +836,22 @@ fn tui_loop(
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
                     KeyCode::Esc | KeyCode::Char('h') => show_history = false,
+                    KeyCode::PageUp => history_scroll = history_scroll.saturating_sub(5),
+                    KeyCode::PageDown => history_scroll = history_scroll.saturating_add(5),
+                    KeyCode::Home => history_scroll = 0,
                     _ => {}
                 }
             } else {
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     KeyCode::Char('e') => settings_menu = Some(SettingsMenu::new()),
-                    KeyCode::Char('h') => show_history = true,
+                    KeyCode::Char('h') => {
+                        history_scroll = 0;
+                        show_history = true;
+                    }
+                    KeyCode::PageUp => dashboard_scroll = dashboard_scroll.saturating_sub(5),
+                    KeyCode::PageDown => dashboard_scroll = dashboard_scroll.saturating_add(5),
+                    KeyCode::Home => dashboard_scroll = 0,
                     KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('[') => {
                         selected_source = selected_source.saturating_sub(1);
                     }
@@ -892,7 +919,8 @@ fn tui_loop(
                             reload_error = Some(error);
                         } else {
                             settings = candidate;
-                            selected_source = settings.counters.len().saturating_sub(1);
+                            selected_source =
+                                value.rows.len() + settings.counters.len().saturating_sub(1);
                         }
                     }
                     KeyCode::Char('x') if !settings.counters.is_empty() => {
@@ -1045,15 +1073,15 @@ fn period_source(period: Period) -> &'static str {
 
 fn dashboard_sources(snapshot: &Snapshot, event: Option<&CalendarEvent>) -> Vec<String> {
     let mut sources = snapshot
-        .counters
+        .rows
         .iter()
-        .map(|counter| format!("counter:{}", counter.id))
+        .map(|row| period_source(row.period).to_string())
         .collect::<Vec<_>>();
     sources.extend(
         snapshot
-            .rows
+            .counters
             .iter()
-            .map(|row| period_source(row.period).to_string()),
+            .map(|counter| format!("counter:{}", counter.id)),
     );
     if let Some(event) = event {
         sources.push(event.source());
@@ -1092,7 +1120,7 @@ fn append_awareness_summary<'a>(
     muted: Color,
 ) {
     let today = Local::now().date_naive();
-    let checks = settings
+    let mut checks = settings
         .awareness
         .checks
         .iter()
@@ -1103,6 +1131,7 @@ fn append_awareness_summary<'a>(
                 .is_some_and(|date| date.date_naive() == today)
         })
         .collect::<Vec<_>>();
+    checks.sort_by(|left, right| left.timestamp.total_cmp(&right.timestamp));
     if checks.is_empty() {
         return;
     }
@@ -1128,6 +1157,19 @@ fn append_awareness_summary<'a>(
     };
     lines.push(Line::from(Span::styled(
         align(&label, &detail, width),
+        Style::default().fg(muted),
+    )));
+    let explanation = if checks.len() == 1 {
+        "Your next check will show the time and waking-day percentage since this one."
+    } else {
+        "Since last check"
+    };
+    lines.push(Line::from(Span::styled(
+        if checks.len() == 1 {
+            explanation.to_string()
+        } else {
+            align("", explanation, width)
+        },
         Style::default().fg(muted),
     )));
     if checks.len() > 1 {
@@ -1158,11 +1200,11 @@ fn day_duration_minutes(start: &str, end: &str) -> u32 {
     }
 }
 
-fn draw_history(frame: &mut ratatui::Frame<'_>, settings: &Settings) {
+fn draw_history(frame: &mut ratatui::Frame<'_>, settings: &Settings, scroll: u16) -> u16 {
     let area = frame.area();
     let palette = theme_palette(settings);
     let today = Local::now().date_naive();
-    let checks = settings
+    let mut checks = settings
         .awareness
         .checks
         .iter()
@@ -1173,6 +1215,7 @@ fn draw_history(frame: &mut ratatui::Frame<'_>, settings: &Settings) {
             (date.date_naive() == today).then_some((check, date))
         })
         .collect::<Vec<_>>();
+    checks.sort_by(|left, right| left.0.timestamp.total_cmp(&right.0.timestamp));
     let average = if checks.len() > 1 {
         let total = checks
             .windows(2)
@@ -1252,8 +1295,7 @@ fn draw_history(frame: &mut ratatui::Frame<'_>, settings: &Settings) {
             .fg(palette.primary)
             .add_modifier(Modifier::BOLD),
     )));
-    let available = area.height.saturating_sub(lines.len() as u16 + 4) as usize;
-    for (index, (check, date)) in checks.iter().enumerate().rev().take(available) {
+    for (index, (check, date)) in checks.iter().enumerate().rev() {
         let interval = if index == 0 {
             "First today".into()
         } else {
@@ -1282,18 +1324,20 @@ fn draw_history(frame: &mut ratatui::Frame<'_>, settings: &Settings) {
     }
     lines.push(Line::default());
     lines.push(Line::from(Span::styled(
-        "h/Esc back · q quit",
+        "PgUp/PgDn scroll · Home top · h/Esc back · q quit",
         Style::default().fg(palette.muted),
     )));
-    frame.render_widget(
-        Paragraph::new(lines).block(
-            Block::default()
-                .title(" history ")
-                .borders(Borders::ALL)
-                .padding(Padding::uniform(1)),
-        ),
-        area,
-    );
+    let block = Block::default()
+        .title(" history ")
+        .borders(Borders::ALL)
+        .padding(Padding::uniform(1));
+    let inner = block.inner(area);
+    let content_height = lines.len();
+    let paragraph = Paragraph::new(lines).block(block);
+    let max_scroll = content_height.saturating_sub(inner.height as usize) as u16;
+    let scroll = scroll.min(max_scroll);
+    frame.render_widget(paragraph.scroll((scroll, 0)), area);
+    scroll
 }
 
 fn source_name(source: &str, settings: &Settings) -> String {
@@ -1317,15 +1361,21 @@ fn source_name(source: &str, settings: &Settings) -> String {
     .into()
 }
 
+#[derive(Clone, Copy)]
+struct DashboardViewport {
+    animation_tick: u64,
+    scroll: u16,
+}
+
 fn draw(
     frame: &mut ratatui::Frame<'_>,
     snapshot: &Snapshot,
     settings: &Settings,
     selected_source: Option<&str>,
     calendar_event: Option<&CalendarEvent>,
-    animation_tick: u64,
+    viewport: DashboardViewport,
     reload_error: Option<&str>,
-) {
+) -> u16 {
     let area = frame.area();
     let width = area.width.saturating_sub(6) as usize;
     let compact = area.height < 29;
@@ -1348,6 +1398,10 @@ fn draw(
         ]),
         Line::default(),
     ];
+    let mut counter_lines = Vec::new();
+    if !snapshot.counters.is_empty() {
+        counter_lines.push(Line::from(Span::styled("Counters", title_style)));
+    }
 
     for counter in &snapshot.counters {
         let source = format!("counter:{}", counter.id);
@@ -1375,7 +1429,7 @@ fn draw(
         } else {
             ""
         };
-        lines.push(Line::from(vec![
+        counter_lines.push(Line::from(vec![
             Span::styled(format!("{marker}{fold}{}", counter.name), title_style),
             Span::raw("  "),
             Span::styled(remaining, Style::default().fg(muted)),
@@ -1383,14 +1437,17 @@ fn draw(
             Span::styled(format!("{percentage}{status}"), title_style),
         ]));
         if !collapsed {
-            lines.push(progress_line(counter.elapsed, None, width, accent, muted));
+            counter_lines.push(progress_line(counter.elapsed, None, width, accent, muted));
         }
         if !compact && !collapsed {
-            lines.push(Line::default());
+            counter_lines.push(Line::default());
         }
     }
 
     if let Some(routine) = &snapshot.routine {
+        if snapshot.counters.is_empty() {
+            counter_lines.push(Line::from(Span::styled("Routine", title_style)));
+        }
         let percentage = format!(
             "{:.*}%",
             settings.mac_os.precision as usize,
@@ -1409,7 +1466,7 @@ fn draw(
                 + percentage.chars().count()
                 + 6,
         );
-        lines.push(Line::from(vec![
+        counter_lines.push(Line::from(vec![
             Span::styled(routine.name.clone(), title_style),
             Span::raw("  "),
             Span::styled(remaining, Style::default().fg(muted)),
@@ -1419,13 +1476,13 @@ fn draw(
             Span::styled(percentage, title_style),
         ]));
         if !compact {
-            lines.push(Line::default());
+            counter_lines.push(Line::default());
         }
         if let (Ok(start), Ok(end)) = (
             parse_date(&routine.started_at),
             parse_date(&routine.ends_at),
         ) {
-            lines.push(Line::from(Span::styled(
+            counter_lines.push(Line::from(Span::styled(
                 align(
                     &start.format("%H:%M").to_string(),
                     &end.format("%H:%M").to_string(),
@@ -1434,8 +1491,8 @@ fn draw(
                 Style::default().fg(muted),
             )));
         }
-        lines.push(progress_line(routine.elapsed, None, width, accent, muted));
-        lines.push(Line::default());
+        counter_lines.push(progress_line(routine.elapsed, None, width, accent, muted));
+        counter_lines.push(Line::default());
     }
 
     for row in &snapshot.rows {
@@ -1598,7 +1655,13 @@ fn draw(
         }
     }
 
+    if !counter_lines.is_empty() {
+        lines.push(section_divider(width, muted));
+        lines.extend(counter_lines);
+    }
+
     if let Some(event) = calendar_event {
+        lines.push(section_divider(width, muted));
         let source = event.source();
         let selected = selected_source == Some(source.as_str());
         let collapsed = settings.awareness.collapsed_sources.contains(&source);
@@ -1655,7 +1718,12 @@ fn draw(
         lines.push(Line::default());
     }
 
-    append_awareness_summary(&mut lines, settings, width, muted);
+    let mut awareness_lines = Vec::new();
+    append_awareness_summary(&mut awareness_lines, settings, width, muted);
+    if !awareness_lines.is_empty() {
+        lines.push(section_divider(width, muted));
+        lines.extend(awareness_lines);
+    }
 
     let selected_counter = selected_source
         .and_then(|source| source.strip_prefix("counter:"))
@@ -1674,13 +1742,14 @@ fn draw(
     let footer_left = reload_error.map_or_else(
         || {
             format!(
-                "{routine_action} · ↑/↓ select · Enter fold · s status · h history · e settings"
+                "{routine_action} · ↑/↓ select · PgUp/PgDn scroll · Enter fold · s status · h history · e settings"
             )
         },
         |error| {
             format!("{routine_action} · ↑/↓ select · Enter fold · s status · h history · {error}")
         },
     );
+    lines.push(section_divider(width, muted));
     lines.push(Line::from(Span::styled(
         align(&footer_left, "q quit", width),
         Style::default().fg(muted),
@@ -1689,12 +1758,17 @@ fn draw(
         .title(" time at a glance ")
         .borders(Borders::ALL)
         .padding(Padding::uniform(1));
-    frame.render_widget(Paragraph::new(Text::from(lines)).block(block), area);
+    let inner = block.inner(area);
+    let content_height = lines.len();
+    let paragraph = Paragraph::new(Text::from(lines)).block(block);
+    let max_scroll = content_height.saturating_sub(inner.height as usize) as u16;
+    let scroll = viewport.scroll.min(max_scroll);
+    frame.render_widget(paragraph.scroll((scroll, 0)), area);
 
     let spinner_area = Rect::new(area.x.saturating_add(2), area.y.saturating_add(2), 2, 1);
     let spinner = match settings.tui.motion {
         TuiMotion::Full | TuiMotion::Reduced => {
-            HOURGLASS_FRAMES[animation_tick as usize % HOURGLASS_FRAMES.len()]
+            HOURGLASS_FRAMES[viewport.animation_tick as usize % HOURGLASS_FRAMES.len()]
         }
         TuiMotion::Off => HOURGLASS_FRAMES[0],
     };
@@ -1702,6 +1776,11 @@ fn draw(
         Paragraph::new(Span::styled(spinner, Style::default().fg(accent))),
         spinner_area,
     );
+    scroll
+}
+
+fn section_divider<'a>(width: usize, muted: Color) -> Line<'a> {
+    Line::from(Span::styled("─".repeat(width), Style::default().fg(muted)))
 }
 
 #[derive(Clone, Copy)]
@@ -1972,7 +2051,20 @@ mod tests {
         let value = snapshot(&settings, Local::now()).unwrap();
         let mut terminal = Terminal::new(TestBackend::new(100, 32)).unwrap();
         terminal
-            .draw(|frame| draw(frame, &value, &settings, Some("day"), None, 0, None))
+            .draw(|frame| {
+                let _ = draw(
+                    frame,
+                    &value,
+                    &settings,
+                    Some("day"),
+                    None,
+                    DashboardViewport {
+                        animation_tick: 0,
+                        scroll: 0,
+                    },
+                    None,
+                );
+            })
             .unwrap();
         let buffer = terminal.backend().buffer();
         let rendered = (0..buffer.area.height)
@@ -1985,6 +2077,94 @@ mod tests {
             .join("\n");
         assert!(rendered.contains("▶ ▸ Day"));
         assert!(rendered.contains('★'));
+    }
+
+    #[test]
+    fn dashboard_navigation_follows_the_native_section_order() {
+        let mut settings = Settings::default();
+        settings.counters.push(CounterSettings {
+            id: "focus".into(),
+            name: "Focus".into(),
+            target_minutes: 60,
+            elapsed_seconds: 0.0,
+            started_at: None,
+        });
+        let value = snapshot(&settings, Local::now()).unwrap();
+        let event_start = Local::now();
+        let event = CalendarEvent {
+            id: 7,
+            title: "Meeting".into(),
+            description: None,
+            edit_url: None,
+            start: event_start,
+            end: event_start + Duration::hours(1),
+        };
+
+        let sources = dashboard_sources(&value, Some(&event));
+        let counter_index = sources
+            .iter()
+            .position(|source| source == "counter:focus")
+            .unwrap();
+        let event_index = sources
+            .iter()
+            .position(|source| source == "hey-event:7")
+            .unwrap();
+
+        assert_eq!(sources.first().map(String::as_str), Some("day"));
+        assert!(counter_index > sources.iter().position(|source| source == "life").unwrap());
+        assert!(event_index > counter_index);
+    }
+
+    #[test]
+    fn dashboard_renders_native_section_order_borders_and_check_context() {
+        let mut settings = Settings::default();
+        settings.counters.push(CounterSettings {
+            id: "focus".into(),
+            name: "Focus".into(),
+            target_minutes: 60,
+            elapsed_seconds: 0.0,
+            started_at: None,
+        });
+        settings.record_check(InteractionCheck {
+            timestamp: Local::now().timestamp_millis() as f64 / 1000.0,
+            source: "day".into(),
+            app_name: Some("Terminal".into()),
+            bundle_identifier: None,
+        });
+        let value = snapshot(&settings, Local::now()).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(120, 60)).unwrap();
+        terminal
+            .draw(|frame| {
+                let _ = draw(
+                    frame,
+                    &value,
+                    &settings,
+                    Some("day"),
+                    None,
+                    DashboardViewport {
+                        animation_tick: 0,
+                        scroll: 0,
+                    },
+                    None,
+                );
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let rendered = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let day = rendered.find("Day").unwrap();
+        let counters = rendered.find("Counters").unwrap();
+        let checks = rendered.find("First check today").unwrap();
+        assert!(day < counters && counters < checks);
+        assert!(rendered.contains("Your next check will show the time"));
+        assert!(rendered.lines().any(|line| line.contains("─────")));
     }
 
     #[test]
