@@ -3,7 +3,7 @@ set -eu
 
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 install_dir=${TIMESCALE_INSTALL_DIR:-"${HOME:?}/.local/bin"}
-icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
+icon_dir="$HOME/.local/share/icons/hicolor/1024x1024/apps"
 
 if ! command -v omarchy-tui-install >/dev/null 2>&1; then
     echo "omarchy-tui-install was not found. Run this script from Omarchy." >&2
@@ -18,7 +18,7 @@ else
     "$project_dir/scripts/install-tui.sh" "${1:-latest}"
 fi
 mkdir -p "$icon_dir"
-cp "$project_dir/Resources/AppIcon.svg" "$icon_dir/timescale.svg"
+cp "$project_dir/Resources/AppIcon.png" "$icon_dir/timescale.png"
 gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
 omarchy-tui-install "Timescale" "$install_dir/timescale" float timescale
 

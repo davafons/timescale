@@ -2,18 +2,18 @@
 set -eu
 
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-source_svg="$project_dir/Resources/AppIcon.svg"
+source_icon="$project_dir/Resources/AppIcon.png"
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/timescale-icon.XXXXXX")
 iconset="$work_dir/AppIcon.iconset"
 trap 'rm -rf "$work_dir"' EXIT INT TERM
 mkdir -p "$iconset"
 
-if command -v rsvg-convert >/dev/null 2>&1; then
-    render() { rsvg-convert -w "$1" -h "$1" "$source_svg" -o "$2"; }
+if command -v sips >/dev/null 2>&1; then
+    render() { sips -s format png -z "$1" "$1" "$source_icon" --out "$2" >/dev/null; }
 elif command -v magick >/dev/null 2>&1; then
-    render() { magick -background none "$source_svg" -resize "$1x$1" "$2"; }
+    render() { magick -background none "$source_icon" -resize "$1x$1" "$2"; }
 else
-    echo "Install librsvg or ImageMagick to regenerate the icon." >&2
+    echo "Install ImageMagick to regenerate the icon." >&2
     exit 1
 fi
 

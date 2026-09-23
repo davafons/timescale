@@ -89,17 +89,50 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     button.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Timescale")
     button.imagePosition = .imageLeading
     button.target = self
-    button.action = #selector(togglePopover)
-    button.sendAction(on: [.leftMouseUp])
+    button.action = #selector(statusItemClicked)
+    button.sendAction(on: [.leftMouseUp, .rightMouseUp])
   }
 
-  @objc private func togglePopover() {
+  @objc private func statusItemClicked() {
+    if NSApplication.shared.currentEvent?.type == .rightMouseUp {
+      showContextMenu()
+      return
+    }
+
     if popover.isShown {
       popover.performClose(nil)
       return
     }
 
     recordCheckAndShowPopover()
+  }
+
+  private func showContextMenu() {
+    guard let event = NSApplication.shared.currentEvent, let button = statusItem.button else {
+      return
+    }
+
+    let menu = NSMenu()
+    let settingsItem = menu.addItem(
+      withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
+    settingsItem.image = NSImage(
+      systemSymbolName: "gearshape", accessibilityDescription: "Settings")
+
+    menu.addItem(.separator())
+    menu.addItem(withTitle: "Quit Timescale", action: #selector(quit), keyEquivalent: "")
+    for item in menu.items {
+      item.target = self
+    }
+
+    NSMenu.popUpContextMenu(menu, with: event, for: button)
+  }
+
+  @objc private func openSettings() {
+    SettingsWindowController.shared.show()
+  }
+
+  @objc private func quit() {
+    NSApplication.shared.terminate(nil)
   }
 
   private func recordCheckAndShowPopover() {

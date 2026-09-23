@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Resources/AppIcon.svg" alt="Timescale" width="128">
+  <img src="Resources/AppIcon.png" alt="Timescale" width="128">
 </p>
 
 <h1 align="center">Timescale</h1>
@@ -29,6 +29,7 @@ No account, analytics, or runtime network requests. Just a useful glance at the 
 - **Birthday marker** — locate your birthday in the current year.
 - **Life estimate** — compare your current age with an editable population-average lifespan.
 - **Native menu-bar percentage** — today's waking-day progress stays visible without opening anything.
+- **Launch at login** — optionally start Timescale automatically when you sign in to your Mac.
 - **HEY calendar progress** — show the current timed event beside the selected progress source and open it directly in HEY.
 - **Time awareness** — record each check-in, flag long gaps, and review hourly activity, source, and application history.
 - **Selectable, collapsible progress** — choose the status source and fold individual rows in either interface.

@@ -4,6 +4,7 @@ import TimescaleCore
 @MainActor
 struct SettingsView: View {
   @StateObject private var locationProvider = LocationProvider()
+  @StateObject private var launchAtLogin = LaunchAtLoginController()
   @AppStorage(SettingsKey.birthTimestamp) private var birthTimestamp = 0.0
   @AppStorage(SettingsKey.birthDateConfigured) private var birthDateConfigured = false
   @AppStorage(SettingsKey.birthYear) private var birthYear = 0
@@ -67,6 +68,31 @@ struct SettingsView: View {
 
   var body: some View {
     Form {
+      Section("Startup") {
+        Group {
+          Toggle(
+            "Launch Timescale at login",
+            isOn: Binding(
+              get: { launchAtLogin.isRegistered },
+              set: { launchAtLogin.setRegistered($0) }
+            )
+          )
+          if launchAtLogin.requiresApproval {
+            Text("Allow Timescale in System Settings to finish enabling automatic launch.")
+              .font(TypographyScale.detail)
+              .foregroundStyle(.secondary)
+            Button("Open Login Items Settings") {
+              launchAtLogin.openSystemSettings()
+            }
+          } else if let errorMessage = launchAtLogin.errorMessage {
+            Text(errorMessage)
+              .font(TypographyScale.detail)
+              .foregroundStyle(.red)
+          }
+        }
+        .settingsRowInset()
+      }
+
       Section("Visible progress") {
         Group {
           Toggle("Day", isOn: $showDay)
@@ -227,12 +253,12 @@ struct SettingsView: View {
         .settingsRowInset()
       }
 
-      Text("All settings stay on this Mac.")
-        .font(TypographyScale.detail)
-        .foregroundStyle(.secondary)
     }
     .formStyle(.grouped)
     .padding(.vertical, LayoutScale.small)
+    .onAppear {
+      launchAtLogin.refresh()
+    }
     .confirmationDialog(
       "Clear all check history?",
       isPresented: $confirmingHistoryReset,
