@@ -408,8 +408,10 @@ struct ProgressPopover: View {
     _ event: CalendarEvent, at date: Date, upcomingProgress: TimeProgress? = nil
   ) -> some View {
     let source = "hey-event:\(event.id)"
-    let progress = upcomingProgress ?? TimeProgress(
-      elapsed: event.progress(at: date), start: event.start, end: event.end)
+    let progress =
+      upcomingProgress
+      ?? TimeProgress(
+        elapsed: event.progress(at: date), start: event.start, end: event.end)
     return VStack(alignment: .leading, spacing: LayoutScale.medium) {
       ProgressRow(
         title: upcomingProgress == nil ? event.title : "Next up: \(event.title)",
