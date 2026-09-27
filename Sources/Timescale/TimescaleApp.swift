@@ -233,14 +233,26 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     }
     let percentage = min(max(result.progress, 0), 1).formatted(
       .percent.precision(.fractionLength(0)))
-    if let event = calendarProvider.currentEvent {
+    if let event = calendarProvider.currentEvent, event.isOngoing(at: now) {
       let eventPercentage = event.progress(at: now).formatted(
         .percent.precision(.fractionLength(0)))
       statusItem.button?.image = nil
       statusItem.button?.attributedTitle = statusTitle(
-        selectedPercentage: percentage, eventPercentage: eventPercentage)
+        selectedPercentage: percentage, eventPercentage: eventPercentage,
+        eventDescription: "Current event")
       statusItem.button?.setAccessibilityValue(
         "\(percentage) of \(result.label) elapsed; \(eventPercentage) of \(event.title) elapsed")
+    } else if let event = calendarProvider.nextEvent,
+      let progress = nextEventProgress(for: event, at: now, defaults: defaults)
+    {
+      let eventPercentage = progress.formatted(.percent.precision(.fractionLength(0)))
+      let startsAt = event.start.formatted(date: .omitted, time: .shortened)
+      statusItem.button?.image = nil
+      statusItem.button?.attributedTitle = statusTitle(
+        selectedPercentage: percentage, eventPercentage: eventPercentage,
+        eventDescription: "Next event")
+      statusItem.button?.setAccessibilityValue(
+        "\(percentage) of \(result.label) elapsed; \(event.title) starts at \(startsAt)")
     } else {
       statusItem.button?.image = nil
       statusItem.button?.attributedTitle = statusTitle(selectedPercentage: percentage)
@@ -248,9 +260,28 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     }
   }
 
+  private func nextEventProgress(
+    for event: CalendarEvent, at date: Date, defaults: UserDefaults
+  ) -> Double? {
+    let day = ProgressCalculator.activeDay(
+      at: date,
+      startMinutes: defaults.integer(forKey: SettingsKey.dayStartMinutes),
+      endMinutes: defaults.integer(forKey: SettingsKey.dayEndMinutes))
+    let lookAhead: TimeInterval = 8 * 60 * 60
+    guard !event.allDay,
+      date >= day.start, date < day.end,
+      event.start > date, event.start <= day.end,
+      event.start.timeIntervalSince(date) <= lookAhead
+    else { return nil }
+
+    let start = max(day.start, event.start.addingTimeInterval(-lookAhead))
+    return date.timeIntervalSince(start) / event.start.timeIntervalSince(start)
+  }
+
   private func statusTitle(
     selectedPercentage: String,
-    eventPercentage: String? = nil
+    eventPercentage: String? = nil,
+    eventDescription: String = "Current event"
   ) -> NSAttributedString {
     let title = NSMutableAttributedString()
     appendStatusSymbol("hourglass", accessibilityDescription: "Selected progress", to: title)
@@ -258,7 +289,7 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     if let eventPercentage {
       title.append(NSAttributedString(string: "  "))
       appendStatusSymbol(
-        "calendar.badge.clock", accessibilityDescription: "Current event", to: title)
+        "calendar.badge.clock", accessibilityDescription: eventDescription, to: title)
       title.append(NSAttributedString(string: " \(eventPercentage)"))
     }
     return title

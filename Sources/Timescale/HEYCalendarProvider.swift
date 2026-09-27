@@ -4,6 +4,7 @@ import TimescaleCore
 @MainActor
 final class HEYCalendarProvider: ObservableObject {
   @Published private(set) var currentEvent: CalendarEvent?
+  @Published private(set) var nextEvent: CalendarEvent?
   @Published private(set) var isAvailable = true
 
   private static let refreshInterval: TimeInterval = 5 * 60
@@ -61,6 +62,10 @@ final class HEYCalendarProvider: ObservableObject {
       .filter { $0.isOngoing(at: date) }
       .sorted { $0.end < $1.end }
       .first
+    nextEvent =
+      cachedEvents
+      .filter { !$0.allDay && $0.start > date }
+      .min { $0.start < $1.start }
   }
 
   nonisolated private static func fetchEvents(at date: Date) -> HEYCalendarFetchOutcome {

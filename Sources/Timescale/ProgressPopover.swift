@@ -166,9 +166,17 @@ struct ProgressPopover: View {
             }
           }
 
-          if let event = calendarProvider.currentEvent {
+          if let event = calendarProvider.currentEvent, event.isOngoing(at: context.date) {
             Divider()
             calendarEventRow(event, at: context.date)
+          } else if let event = calendarProvider.nextEvent, event.isOngoing(at: context.date) {
+            Divider()
+            calendarEventRow(event, at: context.date)
+          } else if let event = calendarProvider.nextEvent,
+            let progress = nextEventProgress(for: event, at: context.date)
+          {
+            Divider()
+            calendarEventRow(event, at: context.date, upcomingProgress: progress)
           }
         }
 
@@ -379,21 +387,44 @@ struct ProgressPopover: View {
     }
   }
 
-  private func calendarEventRow(_ event: CalendarEvent, at date: Date) -> some View {
+  private func nextEventProgress(for event: CalendarEvent, at date: Date) -> TimeProgress? {
+    let day = ProgressCalculator.activeDay(
+      at: date, startMinutes: dayStartMinutes, endMinutes: dayEndMinutes)
+    let lookAhead: TimeInterval = 8 * 60 * 60
+    guard !event.allDay,
+      date >= day.start, date < day.end,
+      event.start > date, event.start <= day.end,
+      event.start.timeIntervalSince(date) <= lookAhead
+    else { return nil }
+
+    let start = max(day.start, event.start.addingTimeInterval(-lookAhead))
+    return TimeProgress(
+      elapsed: date.timeIntervalSince(start) / event.start.timeIntervalSince(start),
+      start: start,
+      end: event.start)
+  }
+
+  private func calendarEventRow(
+    _ event: CalendarEvent, at date: Date, upcomingProgress: TimeProgress? = nil
+  ) -> some View {
     let source = "hey-event:\(event.id)"
-    let progress = TimeProgress(
-      elapsed: event.progress(at: date), start: event.start, end: event.end)
+    let progress =
+      upcomingProgress
+      ?? TimeProgress(
+        elapsed: event.progress(at: date), start: event.start, end: event.end)
     return VStack(alignment: .leading, spacing: LayoutScale.medium) {
       ProgressRow(
-        title: event.title,
-        detail: "HEY event",
+        title: upcomingProgress == nil ? event.title : "Next up: \(event.title)",
+        detail: upcomingProgress == nil
+          ? "HEY event"
+          : "Starts \(event.start.formatted(date: .omitted, time: .shortened))",
         progress: progress,
         period: .event,
         showRemaining: false,
         precision: precision,
         accent: accent,
-        rangeStart: event.start,
-        rangeEnd: event.end,
+        rangeStart: progress.start,
+        rangeEnd: progress.end,
         isCollapsed: isProgressCollapsed(source),
         isStatusSource: false,
         onToggleCollapsed: { toggleProgress(source) },
