@@ -48,10 +48,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/TimescaleIOS.xcarchive" \
             CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath '${{ steps.key.outputs.path }}' \
-            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            CODE_SIGNING_ALLOWED=NO \
             archive
       - name: Upload to TestFlight
         run: |
