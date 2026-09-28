@@ -39,6 +39,32 @@ struct WidgetEntry: TimelineEntry {
   }
 }
 
+private enum WidgetEntries {
+  static func timeline(settings: IOSSettings, period: SharedPeriod?) -> Timeline<WidgetEntry> {
+    let now = Date.now
+    let horizon = now.addingTimeInterval(2 * 60 * 60)
+    let cached = IOSStore.loadEvents()
+    let checks = IOSStore.loadChecks()
+    let regular = (0...8).map { now.addingTimeInterval(Double($0 * 15 * 60)) }
+    let periods = period.map { [$0] } ?? settings.visible
+    let periodBoundaries = periods.flatMap { source -> [Date] in
+      guard let snapshot = settings.snapshot(for: source, at: now) else { return [] }
+      return [snapshot.start, snapshot.end]
+    }
+    let eventBoundaries = cached.events.flatMap { [$0.start, $0.end] }
+    let dates = Set(regular + periodBoundaries + eventBoundaries)
+      .filter { $0 >= now && $0 <= horizon }
+      .sorted()
+      .prefix(40)
+    let entries = dates.map {
+      WidgetEntry(
+        date: $0, settings: settings, period: period,
+        events: cached.events, eventsUpdated: cached.updated, checks: checks)
+    }
+    return Timeline(entries: entries, policy: .after(horizon))
+  }
+}
+
 struct PeriodProvider: AppIntentTimelineProvider {
   func placeholder(in context: Context) -> WidgetEntry {
     WidgetEntry(date: .now, settings: IOSSettings(), period: .day)
@@ -49,14 +75,9 @@ struct PeriodProvider: AppIntentTimelineProvider {
   }
 
   func timeline(for configuration: PeriodWidgetIntent, in context: Context) async -> Timeline<WidgetEntry> {
-    let now = Date.now
     let settings = IOSStore.loadSettings()
-    let entries = (0..<9).map { step in
-      WidgetEntry(
-        date: now.addingTimeInterval(Double(step * 15 * 60)),
-        settings: settings, period: (configuration.period ?? .day).shared)
-    }
-    return Timeline(entries: entries, policy: .after(now.addingTimeInterval(2 * 60 * 60)))
+    return WidgetEntries.timeline(
+      settings: settings, period: (configuration.period ?? .day).shared)
   }
 }
 
@@ -71,13 +92,9 @@ struct NumberProvider: AppIntentTimelineProvider {
   }
 
   func timeline(for configuration: NumberWidgetIntent, in context: Context) async -> Timeline<WidgetEntry> {
-    let now = Date.now
     let settings = IOSStore.loadSettings()
-    let entries = (0..<9).map { step in
-      WidgetEntry(date: now.addingTimeInterval(Double(step * 15 * 60)),
-        settings: settings, period: (configuration.period ?? .year).shared)
-    }
-    return Timeline(entries: entries, policy: .after(now.addingTimeInterval(2 * 60 * 60)))
+    return WidgetEntries.timeline(
+      settings: settings, period: (configuration.period ?? .year).shared)
   }
 }
 
@@ -91,13 +108,7 @@ private struct OverviewProvider: TimelineProvider {
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<WidgetEntry>) -> Void) {
-    let now = Date.now
-    let settings = IOSStore.loadSettings()
-    let entries = (0..<9).map { step in
-      WidgetEntry(date: now.addingTimeInterval(Double(step * 15 * 60)),
-        settings: settings, period: nil)
-    }
-    completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(2 * 60 * 60))))
+    completion(WidgetEntries.timeline(settings: IOSStore.loadSettings(), period: nil))
   }
 }
 
@@ -319,14 +330,21 @@ private struct SpecialWidgetView: View {
   }
 
   private func nextSolarText(_ solar: SolarEvents?) -> String {
-    guard let solar else { return "Add coordinates in Settings" }
+    guard let latitude = entry.settings.latitude,
+      let longitude = entry.settings.longitude
+    else { return "Add coordinates in Settings" }
+    guard let solar else { return "Solar times unavailable here" }
     if solar.sunrise > entry.date {
       return "Sunrise \(solar.sunrise.formatted(date: .omitted, time: .shortened))"
     }
     if solar.sunset > entry.date {
       return "Sunset \(solar.sunset.formatted(date: .omitted, time: .shortened))"
     }
-    return "Sunset \(solar.sunset.formatted(date: .omitted, time: .shortened))"
+    guard let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: entry.date),
+      let next = SolarCalculator.events(
+        on: tomorrow, latitude: latitude, longitude: longitude)
+    else { return "Next solar time unavailable" }
+    return "Sunrise \(next.sunrise.formatted(date: .omitted, time: .shortened)) tomorrow"
   }
 
   @ViewBuilder private var yearBirthday: some View {

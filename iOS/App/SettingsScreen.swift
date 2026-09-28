@@ -132,6 +132,10 @@ struct SettingsScreen: View {
                   model.calendar.refresh(selectedIDs: ids)
                 }))
             }
+            if missingCalendarCount > 0 {
+              Text("\(missingCalendarCount) selected calendar\(missingCalendarCount == 1 ? " is" : "s are") unavailable. Check its subscription in Apple Calendar.")
+                .font(.footnote).foregroundStyle(.secondary)
+            }
           } else {
             Button("Connect Apple Calendar") {
               Task { await model.calendar.requestAccess() }
@@ -146,6 +150,11 @@ struct SettingsScreen: View {
         Button("Done") { dismiss() }
       }}
     }
+  }
+
+  private var missingCalendarCount: Int {
+    guard let selected = model.settings.selectedCalendarIDs else { return 0 }
+    return Set(selected).subtracting(model.calendar.calendars.map(\.calendarIdentifier)).count
   }
 }
 

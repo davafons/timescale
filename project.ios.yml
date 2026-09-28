@@ -23,7 +23,6 @@ targets:
       - path: iOS/App
       - path: iOS/Shared
       - path: iOS/Assets.xcassets
-      - path: Resources/PrivacyInfo.xcprivacy
     dependencies:
       - package: TimescaleCore
         product: TimescaleCore

@@ -75,6 +75,7 @@ struct HistoryScreen: View {
   private func sourceLabel(_ source: String) -> String {
     switch source {
     case "app": "App open"
+    case "widget": "Widget open"
     case "shortcut": "Shortcut"
     default: "Unavailable source (\(source))"
     }
@@ -89,10 +90,12 @@ struct HistoryScreen: View {
       at: date, startMinutes: model.settings.dayStartMinutes,
       endMinutes: model.settings.dayEndMinutes)
     let fraction = day.end.timeIntervalSince(day.start) > 0
-      ? gap / day.end.timeIntervalSince(day.start) : 0
+      ? min(gap / day.end.timeIntervalSince(day.start), 1) : 0
     let duration = Duration.seconds(gap).formatted(
       .units(allowed: [.days, .hours, .minutes], width: .abbreviated))
-    return "After \(duration) · \(fraction.formatted(.percent.precision(.fractionLength(1)))) of a waking day"
+    let longGap = gap >= Double(model.settings.longGapMinutes * 60)
+      ? " · Long gap" : ""
+    return "After \(duration) · \(fraction.formatted(.percent.precision(.fractionLength(1)))) of a waking day\(longGap)"
   }
 }
 

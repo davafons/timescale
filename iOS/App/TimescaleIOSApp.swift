@@ -33,13 +33,7 @@ import WidgetKit
   }
 
   func activate(source: String = "app") {
-    now = .now
-    calendar.refresh(selectedIDs: settings.selectedCalendarIDs)
-    if settings.locationMode == "automatic" { location.refresh() }
-    Task {
-      await ProgressActivityManager.reconcile(settings: settings, now: now)
-      trackingPeriod = ProgressActivityManager.activePeriod
-    }
+    refreshTimeContext()
     if let lastActivation, now.timeIntervalSince(lastActivation) < 3 {
       if source == "widget", let last = checks.last, last.source == "app" {
         checks[checks.count - 1] = InteractionHistory.Check(
@@ -52,6 +46,18 @@ import WidgetKit
     lastActivation = now
     checks = IOSStore.loadChecks()
     checks.append(IOSStore.checkIn(source: source, at: now))
+    WidgetCenter.shared.reloadAllTimelines()
+    Task { await ReminderManager.reschedule(settings: settings, checks: checks) }
+  }
+
+  func refreshTimeContext() {
+    now = .now
+    calendar.refresh(selectedIDs: settings.selectedCalendarIDs)
+    if settings.locationMode == "automatic" { location.refresh() }
+    Task {
+      await ProgressActivityManager.reconcile(settings: settings, now: now)
+      trackingPeriod = ProgressActivityManager.activePeriod
+    }
     WidgetCenter.shared.reloadAllTimelines()
     Task { await ReminderManager.reschedule(settings: settings, checks: checks) }
   }
@@ -102,6 +108,14 @@ import WidgetKit
           guard url.scheme == "timescale" else { return }
           model.activate(source: "widget")
         }
+        .onReceive(NotificationCenter.default.publisher(
+          for: .NSSystemTimeZoneDidChange)) { _ in
+            model.refreshTimeContext()
+          }
+        .onReceive(NotificationCenter.default.publisher(
+          for: UIApplication.significantTimeChangeNotification)) { _ in
+            model.refreshTimeContext()
+          }
     }
   }
 }

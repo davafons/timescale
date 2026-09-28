@@ -71,6 +71,28 @@ struct IOSContractTests {
       calendar: tokyo) == nil)
   }
 
+  @Test func reminderOncePerOvernightGap() {
+    let check = InteractionHistory.Check(
+      timestamp: date(2026, 9, 28, 23, 30, calendar: tokyo).timeIntervalSince1970,
+      source: "app")
+    let waiting = date(2026, 9, 29, 0, 45, calendar: tokyo)
+    #expect(ReminderPlanner.nextReminder(
+      after: [check], now: waiting, thresholdMinutes: 90,
+      dayStartMinutes: 22 * 60, dayEndMinutes: 6 * 60,
+      calendar: tokyo) == date(2026, 9, 29, 1, calendar: tokyo))
+    #expect(ReminderPlanner.nextReminder(
+      after: [check], now: date(2026, 9, 29, 1, 1, calendar: tokyo),
+      thresholdMinutes: 90, dayStartMinutes: 22 * 60,
+      dayEndMinutes: 6 * 60, calendar: tokyo) == nil)
+    let late = InteractionHistory.Check(
+      timestamp: date(2026, 9, 29, 5, 30, calendar: tokyo).timeIntervalSince1970,
+      source: "app")
+    #expect(ReminderPlanner.nextReminder(
+      after: [late], now: date(2026, 9, 29, 5, 40, calendar: tokyo),
+      thresholdMinutes: 90, dayStartMinutes: 22 * 60,
+      dayEndMinutes: 6 * 60, calendar: tokyo) == nil)
+  }
+
   @Test func eventSelectionDeduplicatesSources() {
     let now = date(2026, 9, 28, 10, calendar: tokyo)
     let event = TimedEvent(
@@ -90,5 +112,23 @@ struct IOSContractTests {
       title: "Review", start: event.start, end: event.end)
     #expect(TimedEvents.deduplicated([event, separateEvent]).count == 2)
     #expect(TimedEvents.select([event, copy], at: now).current?.title == "Review")
+  }
+
+  @Test func eventLeadInRespectsWakingDayAndEightHours() {
+    let now = date(2026, 9, 28, 10, calendar: tokyo)
+    let day = ProgressCalculator.activeDay(
+      at: now, startMinutes: 8 * 60, endMinutes: 23 * 60,
+      calendar: tokyo)
+    let eventStart = date(2026, 9, 28, 12, calendar: tokyo)
+    let leadIn = TimedEvents.leadIn(to: eventStart, at: now, wakingDay: day)
+    #expect(leadIn?.start == day.start)
+    #expect(leadIn?.end == eventStart)
+    #expect(leadIn?.elapsed == 0.5)
+    #expect(TimedEvents.leadIn(
+      to: date(2026, 9, 28, 19, calendar: tokyo),
+      at: now, wakingDay: day) == nil)
+    #expect(TimedEvents.leadIn(
+      to: date(2026, 9, 29, 1, calendar: tokyo),
+      at: now, wakingDay: day) == nil)
   }
 }

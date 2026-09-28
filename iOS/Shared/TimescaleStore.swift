@@ -62,6 +62,11 @@ enum IOSStore {
     defaults.set(try? JSONEncoder().encode(events), forKey: eventsKey)
     defaults.set(date, forKey: eventsUpdatedKey)
   }
+
+  static func clearEvents() {
+    defaults.removeObject(forKey: eventsKey)
+    defaults.removeObject(forKey: eventsUpdatedKey)
+  }
 }
 
 struct IOSSettings: Codable, Equatable {

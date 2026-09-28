@@ -18,6 +18,12 @@ struct DashboardView: View {
     }
   }
 
+  private var todayCheckCount: Int {
+    model.checks.filter {
+      Calendar.current.isDateInToday(Date(timeIntervalSince1970: $0.timestamp))
+    }.count
+  }
+
   var body: some View {
     NavigationStack {
       ScrollView {
@@ -46,7 +52,7 @@ struct DashboardView: View {
                   ProgressRow(
                     snapshot: snapshot, precision: model.settings.precision,
                     collapsed: model.settings.collapsed.contains(period),
-                    tint: tint
+                    tint: tint, settings: model.settings
                   ) {
                     if model.settings.collapsed.contains(period) {
                       model.settings.collapsed.remove(period)
@@ -84,7 +90,7 @@ struct DashboardView: View {
 
           VStack(alignment: .leading, spacing: 6) {
             Text("Time awareness").font(.headline)
-            Text("\(model.checks.count) check-ins saved")
+            Text("\(todayCheckCount) check-ins today")
             if let last = model.checks.last {
               let date = Date(timeIntervalSince1970: last.timestamp)
               Text("Last check-in \(date.formatted(date: .abbreviated, time: .shortened))")
@@ -170,6 +176,12 @@ struct DashboardView: View {
     if model.calendar.accessGranted {
       let selected = TimedEvents.select(model.calendar.events, at: model.now)
       if let event = selected.current ?? selected.next {
+        let wakingDay = ProgressCalculator.activeDay(
+          at: model.now, startMinutes: model.settings.dayStartMinutes,
+          endMinutes: model.settings.dayEndMinutes)
+        let leadIn = selected.current == nil
+          ? TimedEvents.leadIn(to: event.start, at: model.now, wakingDay: wakingDay)
+          : nil
         VStack(alignment: .leading, spacing: 8) {
           Text(selected.current != nil ? "Current event" : "Next event").font(.headline)
           Text(event.title).font(.title3)
@@ -177,6 +189,10 @@ struct DashboardView: View {
             .font(.caption).foregroundStyle(.secondary)
           if selected.current != nil {
             ProgressView(value: event.progress(at: model.now)).tint(tint)
+          } else if let leadIn {
+            ProgressView(value: leadIn.elapsed).tint(tint)
+            Text("Eight-hour lead-in · starts \(event.start, style: .relative)")
+              .font(.caption).foregroundStyle(.secondary)
           }
           if let detail = event.detail, !detail.isEmpty {
             Text(detail).font(.caption).lineLimit(3)
@@ -217,7 +233,40 @@ private struct ProgressRow: View {
   let precision: Int
   let collapsed: Bool
   let tint: Color
+  let settings: IOSSettings
   let toggle: () -> Void
+
+  private var markers: [ProgressMarker] {
+    switch snapshot.period {
+    case .day:
+      guard let latitude = settings.latitude, let longitude = settings.longitude else {
+        return []
+      }
+      let days = [snapshot.start, snapshot.end]
+      let events = days.compactMap {
+        SolarCalculator.events(on: $0, latitude: latitude, longitude: longitude)
+      }
+      return events.flatMap { solar in
+        [ProgressMarker(label: "Sunrise", symbol: "sunrise.fill", date: solar.sunrise),
+          ProgressMarker(label: "Sunset", symbol: "sunset.fill", date: solar.sunset)]
+      }.filter { snapshot.start <= $0.date && $0.date <= snapshot.end }
+        .uniqued()
+    case .year:
+      guard let birthDate = settings.birthDate,
+        let birthday = Self.birthday(in: snapshot, birthDate: birthDate)
+      else { return [] }
+      return [ProgressMarker(label: "Birthday", symbol: "gift.fill", date: birthday)]
+    default:
+      return []
+    }
+  }
+
+  private var lifeContext: String? {
+    guard snapshot.period == .life, let birthDate = settings.birthDate else { return nil }
+    let age = max(0, Calendar.current.dateComponents(
+      [.year], from: birthDate, to: snapshot.calculatedAt).year ?? 0)
+    return "Age \(age) · \(settings.country) population average \(settings.expectedYears.formatted()) years"
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 9) {
@@ -225,9 +274,13 @@ private struct ProgressRow: View {
         HStack {
           Text(snapshot.period.title).font(.headline)
           Spacer()
-          Text(snapshot.displayedFraction, format: .percent.precision(
-            .fractionLength(precision)))
-            .font(.title3.monospacedDigit())
+          VStack(alignment: .trailing, spacing: 1) {
+            Text(snapshot.displayedFraction, format: .percent.precision(
+              .fractionLength(precision)))
+              .font(.title3.monospacedDigit())
+            Text(settings.showRemaining ? "remaining" : "elapsed")
+              .font(.caption2).foregroundStyle(.secondary)
+          }
           Image(systemName: collapsed ? "chevron.down" : "chevron.up")
             .font(.caption)
         }
@@ -238,8 +291,20 @@ private struct ProgressRow: View {
           .formatted(.units(allowed: [.days, .hours, .minutes], width: .abbreviated))
         let onePercent = Duration.seconds(snapshot.onePercentDuration)
           .formatted(.units(allowed: [.days, .hours, .minutes], width: .abbreviated))
-        ProgressView(value: snapshot.elapsedFraction)
-          .tint(tint)
+        MarkerProgressBar(
+          progress: snapshot.elapsedFraction, markers: markers,
+          start: snapshot.start, end: snapshot.end, tint: tint)
+          .frame(height: 16)
+        if !markers.isEmpty {
+          ForEach(markers) { marker in
+            Label("\(marker.label) \(marker.date.formatted(date: .omitted, time: .shortened))",
+              systemImage: marker.symbol)
+              .font(.caption).foregroundStyle(.secondary)
+          }
+        }
+        if let lifeContext {
+          Text(lifeContext).font(.caption).foregroundStyle(.secondary)
+        }
         Text("\(snapshot.start.formatted(date: .abbreviated, time: .shortened)) – \(snapshot.end.formatted(date: .abbreviated, time: .shortened))")
           .font(.caption).foregroundStyle(.secondary)
         Text("Time left: \(timeLeft) · 1%: \(onePercent)")
@@ -249,5 +314,60 @@ private struct ProgressRow: View {
     .padding()
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(snapshot.period.title), \(settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(precision)))), from \(snapshot.start.formatted()), to \(snapshot.end.formatted())")
+  }
+
+  private static func birthday(in snapshot: PeriodSnapshot, birthDate: Date) -> Date? {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .autoupdatingCurrent
+    let parts = calendar.dateComponents([.month, .day], from: birthDate)
+    guard let month = parts.month, let day = parts.day,
+      let monthStart = calendar.date(from: DateComponents(
+        year: calendar.component(.year, from: snapshot.start), month: month,
+        day: 1, hour: 12)),
+      let days = calendar.range(of: .day, in: .month, for: monthStart)
+    else { return nil }
+    return calendar.date(byAdding: .day, value: min(day, days.count) - 1, to: monthStart)
+  }
+}
+
+private struct ProgressMarker: Identifiable {
+  let label: String
+  let symbol: String
+  let date: Date
+  var id: String { "\(label)-\(date.timeIntervalSince1970)" }
+}
+
+private extension Array where Element == ProgressMarker {
+  func uniqued() -> [ProgressMarker] {
+    var seen = Set<String>()
+    return filter { seen.insert($0.id).inserted }
+  }
+}
+
+private struct MarkerProgressBar: View {
+  let progress: Double
+  let markers: [ProgressMarker]
+  let start: Date
+  let end: Date
+  let tint: Color
+
+  var body: some View {
+    GeometryReader { geometry in
+      ZStack(alignment: .leading) {
+        Capsule().fill(.secondary.opacity(0.2)).frame(height: 8)
+        Capsule().fill(tint)
+          .frame(width: geometry.size.width * min(max(progress, 0), 1), height: 8)
+        ForEach(markers) { marker in
+          let fraction = end > start
+            ? min(max(marker.date.timeIntervalSince(start) / end.timeIntervalSince(start), 0), 1)
+            : 0
+          Circle().fill(.primary)
+            .frame(width: 10, height: 10)
+            .offset(x: geometry.size.width * fraction - 5)
+        }
+      }
+      .frame(height: geometry.size.height)
+    }
   }
 }

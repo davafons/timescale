@@ -12,7 +12,14 @@ final class MacCalendarSettingsModel: ObservableObject {
   }
 
   func refresh() {
-    guard authorized else { return }
+    guard authorized else {
+      calendars = []
+      if EKEventStore.authorizationStatus(for: .event) == .denied {
+        message = "Calendar access was denied. Enable full access in System Settings."
+      }
+      return
+    }
+    message = nil
     calendars = store.calendars(for: .event).sorted {
       $0.title.localizedStandardCompare($1.title) == .orderedAscending
     }
@@ -62,6 +69,11 @@ struct MacCalendarSettings: View {
               notify()
             }))
         }
+        if missingCalendarCount > 0 {
+          Text("\(missingCalendarCount) selected calendar\(missingCalendarCount == 1 ? " is" : "s are") unavailable. Check its subscription in Apple Calendar.")
+            .font(TypographyScale.detail)
+            .foregroundStyle(.secondary)
+        }
       } else {
         Button("Connect Apple Calendar") { model.request() }
       }
@@ -80,6 +92,11 @@ struct MacCalendarSettings: View {
       let data = selectedIDsJSON.data(using: .utf8)
     else { return nil }
     return try? JSONDecoder().decode([String].self, from: data)
+  }
+
+  private var missingCalendarCount: Int {
+    guard let selectedIDs else { return 0 }
+    return Set(selectedIDs).subtracting(model.calendars.map(\.calendarIdentifier)).count
   }
 
   private func notify() {

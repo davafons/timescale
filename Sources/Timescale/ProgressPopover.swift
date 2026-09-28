@@ -6,6 +6,7 @@ import TimescaleCore
 struct ProgressPopover: View {
   @ObservedObject var checkSession: CheckSession
   @ObservedObject var calendarProvider: HEYCalendarProvider
+  @State private var selectedCalendarEvent: CalendarEvent?
   @AppStorage(SettingsKey.birthTimestamp) private var birthTimestamp = 0.0
   @AppStorage(SettingsKey.birthDateConfigured) private var birthDateConfigured = false
   @AppStorage(SettingsKey.birthYear) private var birthYear = 0
@@ -199,6 +200,9 @@ struct ProgressPopover: View {
       .padding(LayoutScale.xLarge)
       .frame(width: LayoutScale.popoverWidth)
     }
+    .sheet(item: $selectedCalendarEvent) { event in
+      CalendarEventDetail(event: event)
+    }
   }
 
   @ViewBuilder
@@ -234,20 +238,10 @@ struct ProgressPopover: View {
   }
 
   private func nextEventProgress(for event: CalendarEvent, at date: Date) -> TimeProgress? {
+    guard !event.allDay else { return nil }
     let day = ProgressCalculator.activeDay(
       at: date, startMinutes: dayStartMinutes, endMinutes: dayEndMinutes)
-    let lookAhead: TimeInterval = 8 * 60 * 60
-    guard !event.allDay,
-      date >= day.start, date < day.end,
-      event.start > date, event.start <= day.end,
-      event.start.timeIntervalSince(date) <= lookAhead
-    else { return nil }
-
-    let start = max(day.start, event.start.addingTimeInterval(-lookAhead))
-    return TimeProgress(
-      elapsed: date.timeIntervalSince(start) / event.start.timeIntervalSince(start),
-      start: start,
-      end: event.start)
+    return TimedEvents.leadIn(to: event.start, at: date, wakingDay: day)
   }
 
   private func calendarEventRow(
@@ -285,6 +279,15 @@ struct ProgressPopover: View {
             .foregroundStyle(.secondary)
             .lineLimit(3)
         }
+
+        Button {
+          selectedCalendarEvent = event
+        } label: {
+          Label("View event", systemImage: "calendar")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .font(TypographyScale.action)
 
         if let editURL = event.editURL {
           Button {
@@ -829,6 +832,34 @@ private struct CheckHistoryView: View {
 
   private func sourceLabel(_ source: String) -> String {
     sourceNames[source] ?? "Unavailable source"
+  }
+}
+
+private struct CalendarEventDetail: View {
+  @Environment(\.dismiss) private var dismiss
+  let event: CalendarEvent
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      HStack {
+        Text(event.title).font(.title2.bold())
+        Spacer()
+        Button("Done") { dismiss() }
+      }
+      LabeledContent("When") {
+        Text("\(event.start.formatted(date: .abbreviated, time: .shortened)) – \(event.end.formatted(date: .abbreviated, time: .shortened))")
+      }
+      LabeledContent("Calendar", value: event.source)
+      if let description = event.description, !description.isEmpty {
+        Text(description).textSelection(.enabled)
+      }
+      if let url = event.editURL {
+        Link("Open in HEY", destination: url)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(24)
+    .frame(minWidth: 380, minHeight: 220)
   }
 }
 

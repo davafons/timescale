@@ -19,9 +19,9 @@ Use a physical iPhone on iOS 18 or later with a fresh install. Record the device
 
 ## Build evidence
 
-- `swift test --filter IOSContractTests`: five contract tests passed on 2026-09-28.
+- `swift test`: 36 Swift tests passed on 2026-09-28, including seven iOS contract tests.
 - `xcodebuild` simulator Debug build: passed on 2026-09-28.
-- Signed Release archive and App Store Connect upload: passed on 2026-09-28; build 0.1.0 (1) entered processing.
+- Signed Release archive and App Store Connect upload: passed on 2026-09-28; build 0.1.0 (2.1) reached internal testing.
 - Dashboard screenshot: `artifacts/ios/dashboard.png`.
 
 Home and Lock Screen widget captures and the physical-device checks above remain to be recorded.

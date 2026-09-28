@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0D37292230FAA8AE415EF9B0 /* TimescaleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123DA41325451CCDCDE18383 /* TimescaleStore.swift */; };
 		13DB3EDEF891EB448F27C04F /* TimescaleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 19E7BB360C84180E0CA428C2 /* TimescaleCore */; };
+		17CCD42CFF6451C4099E05B2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0AC45A11D071DCC95796CC1D /* PrivacyInfo.xcprivacy */; };
 		2856C5014C43144AFBEA17EA /* ReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCDE463D07DC4A4B9CC9E50B /* ReminderManager.swift */; };
 		28A015E81BB4D4EFD8422784 /* TimescaleWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A8C807D7A93F2230CCCA4B43 /* TimescaleWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		28BDE5B4D7C13C0C37080C9E /* TimescaleIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D45AADFCFC02E29E1DC49AE7 /* TimescaleIntents.swift */; };
@@ -18,10 +19,10 @@
 		603DE8413A0EA45D9FF3003B /* HistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC7710D876BFAA79963E9FAF /* HistoryScreen.swift */; };
 		68C6E9862BEDF4E093C2E276 /* TimescaleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 25D9077B5246B8B2C76005E3 /* TimescaleCore */; };
 		6F5546728A7B3F8D76651516 /* ProgressLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4669A8842EB50DA5C7794CDC /* ProgressLiveActivity.swift */; };
-		740EF9A9D010AE1CDFC8C06D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 907181E538D74C478F03A6C2 /* PrivacyInfo.xcprivacy */; };
 		8D7E8765C0BCBFE598AD6B97 /* IOSLocationSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74AEDCC647CA0BD8306F676 /* IOSLocationSource.swift */; };
 		8E04CD37D4A0E67A3E36621F /* CalendarSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A201D02CC812FD9E77D0E5AA /* CalendarSource.swift */; };
 		8E0DDB7F7EEC71B7C6272832 /* ProgressActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6279718BD46859D41D8299C3 /* ProgressActivityManager.swift */; };
+		AC43F1976D6C3D83B8A3DB3C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3F96DFB48255EE5FD422027D /* PrivacyInfo.xcprivacy */; };
 		ACD417A48889C33C4287E7F9 /* ProgressActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D96FF2A7E8B0B1BD6DB25B /* ProgressActivityAttributes.swift */; };
 		AE9D1A1B51CA2E359292FFC9 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 649E417C24AF65100FCCE028 /* SettingsScreen.swift */; };
 		B5F92DCC6B41A3D6BDBD0319 /* IntentPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60011A6A434A31609E25AC6 /* IntentPeriod.swift */; };
@@ -56,16 +57,17 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0AC45A11D071DCC95796CC1D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		123DA41325451CCDCDE18383 /* TimescaleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimescaleStore.swift; sourceTree = "<group>"; };
 		136076DA63FE04CA2E950981 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1DE5A5C382475976FDFE0D65 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		35DCDA49BFA953A5D15243B4 /* TimescaleIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimescaleIOSApp.swift; sourceTree = "<group>"; };
+		3F96DFB48255EE5FD422027D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		4669A8842EB50DA5C7794CDC /* ProgressLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressLiveActivity.swift; sourceTree = "<group>"; };
 		6279718BD46859D41D8299C3 /* ProgressActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressActivityManager.swift; sourceTree = "<group>"; };
 		649E417C24AF65100FCCE028 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		70325AF49BE430959D461285 /* timescale */ = {isa = PBXFileReference; lastKnownFileType = folder; name = timescale; path = .; sourceTree = SOURCE_ROOT; };
 		88EFC4274D62959D9D9B0198 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		907181E538D74C478F03A6C2 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A201D02CC812FD9E77D0E5AA /* CalendarSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSource.swift; sourceTree = "<group>"; };
 		A8C807D7A93F2230CCCA4B43 /* TimescaleWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = TimescaleWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B336518A1005CD0CFBAF1E1A /* TimescaleWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimescaleWidgets.swift; sourceTree = "<group>"; };
@@ -113,7 +115,6 @@
 				CE02E24F0984E9D97D6A82BC /* App */,
 				C7FACA38BE81683444C1BCC6 /* iOS */,
 				F3E6DEFB801EA85DA04FA40F /* Packages */,
-				F65848687BB2660908657D65 /* Resources */,
 				E48DBFBF7BE9898BF48C99DD /* Shared */,
 				7B41213362A89DAC0C273A8A /* Widgets */,
 				469390A317EB2F72E488AF35 /* Products */,
@@ -124,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				136076DA63FE04CA2E950981 /* Info.plist */,
+				0AC45A11D071DCC95796CC1D /* PrivacyInfo.xcprivacy */,
 				4669A8842EB50DA5C7794CDC /* ProgressLiveActivity.swift */,
 				B336518A1005CD0CFBAF1E1A /* TimescaleWidgets.swift */,
 			);
@@ -146,6 +148,7 @@
 				1DE5A5C382475976FDFE0D65 /* DashboardView.swift */,
 				CC7710D876BFAA79963E9FAF /* HistoryScreen.swift */,
 				D74AEDCC647CA0BD8306F676 /* IOSLocationSource.swift */,
+				3F96DFB48255EE5FD422027D /* PrivacyInfo.xcprivacy */,
 				6279718BD46859D41D8299C3 /* ProgressActivityManager.swift */,
 				DCDE463D07DC4A4B9CC9E50B /* ReminderManager.swift */,
 				649E417C24AF65100FCCE028 /* SettingsScreen.swift */,
@@ -173,14 +176,6 @@
 				70325AF49BE430959D461285 /* timescale */,
 			);
 			name = Packages;
-			sourceTree = "<group>";
-		};
-		F65848687BB2660908657D65 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				907181E538D74C478F03A6C2 /* PrivacyInfo.xcprivacy */,
-			);
-			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -213,6 +208,7 @@
 			buildConfigurationList = 2FF05EA8CC4562BDD0B6E222 /* Build configuration list for PBXNativeTarget "TimescaleWidgets" */;
 			buildPhases = (
 				7AF23DDCC0451411A2EF6CDF /* Sources */,
+				48175BD63D891F8CC039DA64 /* Resources */,
 				D7C9A11A4766F1564779D7FD /* Frameworks */,
 			);
 			buildRules = (
@@ -270,12 +266,20 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		48175BD63D891F8CC039DA64 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				17CCD42CFF6451C4099E05B2 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CA09653132972FA32B64E3E6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				C6B6844CAECF7B37079D6CDF /* Assets.xcassets in Resources */,
-				740EF9A9D010AE1CDFC8C06D /* PrivacyInfo.xcprivacy in Resources */,
+				AC43F1976D6C3D83B8A3DB3C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -36,6 +36,20 @@ public struct TimedEventSelection: Equatable, Sendable {
 }
 
 public enum TimedEvents {
+  public static func leadIn(
+    to eventStart: Date, at date: Date, wakingDay: TimeProgress,
+    lookAhead: TimeInterval = 8 * 60 * 60
+  ) -> TimeProgress? {
+    guard date >= wakingDay.start, date < wakingDay.end,
+      eventStart > date, eventStart <= wakingDay.end,
+      eventStart.timeIntervalSince(date) <= lookAhead
+    else { return nil }
+    let start = max(wakingDay.start, eventStart.addingTimeInterval(-lookAhead))
+    return TimeProgress(
+      elapsed: date.timeIntervalSince(start) / eventStart.timeIntervalSince(start),
+      start: start, end: eventStart)
+  }
+
   public static func deduplicated(_ events: [TimedEvent]) -> [TimedEvent] {
     var kept: [TimedEvent] = []
     let sorted = events

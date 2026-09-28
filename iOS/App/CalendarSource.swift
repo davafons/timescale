@@ -40,7 +40,17 @@ import WidgetKit
   }
 
   func refresh(selectedIDs: [String]?) {
-    guard accessGranted else { return }
+    guard accessGranted else {
+      calendars = []
+      events = []
+      updatedAt = nil
+      IOSStore.clearEvents()
+      WidgetCenter.shared.reloadAllTimelines()
+      if EKEventStore.authorizationStatus(for: .event) == .denied {
+        errorMessage = "Calendar access was denied. Enable full access in Settings to show events."
+      }
+      return
+    }
     calendars = store.calendars(for: .event).sorted {
       $0.title.localizedStandardCompare($1.title) == .orderedAscending
     }
@@ -61,15 +71,16 @@ import WidgetKit
     events = TimedEvents.deduplicated(
       store.events(matching: predicate)
         .filter { !$0.isAllDay }
-        .map {
-          TimedEvent(
-            id: $0.eventIdentifier,
-            source: $0.calendar.title,
-            externalUID: $0.calendarItemExternalIdentifier,
-            title: $0.title ?? "Untitled event",
-            detail: $0.notes,
-            start: $0.startDate,
-            end: $0.endDate)
+        .compactMap { event -> TimedEvent? in
+          guard let identifier = event.eventIdentifier else { return nil }
+          return TimedEvent(
+            id: identifier,
+            source: event.calendar.title,
+            externalUID: event.calendarItemExternalIdentifier,
+            title: event.title ?? "Untitled event",
+            detail: event.notes,
+            start: event.startDate,
+            end: event.endDate)
         })
     updatedAt = now
     errorMessage = nil
