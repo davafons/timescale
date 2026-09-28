@@ -118,7 +118,13 @@ final class SharedSettingsCoordinator {
       var configuration = try JSONDecoder().decode(SharedConfiguration.self, from: data)
       try configuration.validate()
       let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-      let hasCountersField = object?["counters"] != nil
+      let collapsedSources =
+        (object?["awareness"] as? [String: Any])?["collapsedSources"] as? [String]
+      let hasLegacyTimerFields =
+        object?["counters"] != nil || object?["routine"] != nil
+        || collapsedSources?.contains(where: { $0.hasPrefix("counter:") }) == true
+        || ((object?["macOS"] as? [String: Any])?["statusItemSource"] as? String)?
+          .hasPrefix("counter:") == true
       let hasAwarenessField = object?["awareness"] != nil
       var shouldExportReconciledChecks = false
       if hasAwarenessField, let lastFileData,
@@ -134,12 +140,9 @@ final class SharedSettingsCoordinator {
         configuration.awareness.checks = reconciled
       }
       suppressDefaultsUntil = Date().addingTimeInterval(0.75)
-      apply(
-        configuration,
-        preserveMigratedCounters: !hasCountersField,
-        preserveMigratedAwareness: !hasAwarenessField)
+      apply(configuration, preserveMigratedAwareness: !hasAwarenessField)
       lastFileData = data
-      if !hasAwarenessField || shouldExportReconciledChecks {
+      if hasLegacyTimerFields || !hasAwarenessField || shouldExportReconciledChecks {
         suppressDefaultsUntil = .distantPast
         exportNow()
       }
@@ -187,20 +190,6 @@ final class SharedSettingsCoordinator {
     configuration.version = SharedConfiguration.currentVersion
     configuration.day.start = Self.timeString(defaults.integer(forKey: SettingsKey.dayStartMinutes))
     configuration.day.end = Self.timeString(defaults.integer(forKey: SettingsKey.dayEndMinutes))
-    configuration.routine.name =
-      defaults.string(forKey: SettingsKey.routineName) ?? "Work"
-    configuration.routine.durationMinutes =
-      defaults.integer(forKey: SettingsKey.routineDurationMinutes)
-    let routineStartedTimestamp = defaults.double(forKey: SettingsKey.routineStartedTimestamp)
-    configuration.routine.startedAt =
-      routineStartedTimestamp > 0
-      ? ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: routineStartedTimestamp))
-      : nil
-    if let data = defaults.string(forKey: SettingsKey.countersJSON)?.data(using: .utf8),
-      let counters = try? JSONDecoder().decode([SharedCounter].self, from: data)
-    {
-      configuration.counters = counters
-    }
     configuration.week.startsOn =
       defaults.string(forKey: SettingsKey.weekStartsOn) == WeekStartChoice.sunday.rawValue
       ? .sunday : .monday
@@ -226,6 +215,9 @@ final class SharedSettingsCoordinator {
     configuration.macOS.showRemaining = defaults.bool(forKey: SettingsKey.showRemaining)
     configuration.macOS.statusItemSource =
       defaults.string(forKey: SettingsKey.statusItemSource) ?? "day"
+    if configuration.macOS.statusItemSource.hasPrefix("counter:") {
+      configuration.macOS.statusItemSource = "day"
+    }
     configuration.awareness.thresholdMinutes =
       defaults.integer(forKey: SettingsKey.awarenessThresholdMinutes)
     configuration.awareness.collapsedSources = collapsedProgressSources()
@@ -235,7 +227,6 @@ final class SharedSettingsCoordinator {
 
   private func apply(
     _ configuration: SharedConfiguration,
-    preserveMigratedCounters: Bool = false,
     preserveMigratedAwareness: Bool = false
   ) {
     if let start = try? SharedConfiguration.minutes(configuration.day.start) {
@@ -243,22 +234,6 @@ final class SharedSettingsCoordinator {
     }
     if let end = try? SharedConfiguration.minutes(configuration.day.end) {
       defaults.set(end, forKey: SettingsKey.dayEndMinutes)
-    }
-    defaults.set(configuration.routine.name, forKey: SettingsKey.routineName)
-    defaults.set(configuration.routine.durationMinutes, forKey: SettingsKey.routineDurationMinutes)
-    if let startedAt = configuration.routine.startedAt,
-      let date = ISO8601DateFormatter().date(from: startedAt)
-    {
-      defaults.set(date.timeIntervalSince1970, forKey: SettingsKey.routineStartedTimestamp)
-    } else {
-      defaults.set(0.0, forKey: SettingsKey.routineStartedTimestamp)
-    }
-    if !preserveMigratedCounters {
-      if let data = try? JSONEncoder().encode(configuration.counters),
-        let value = String(data: data, encoding: .utf8)
-      {
-        defaults.set(value, forKey: SettingsKey.countersJSON)
-      }
     }
     defaults.set(configuration.week.startsOn.rawValue, forKey: SettingsKey.weekStartsOn)
     defaults.set(configuration.quarter.cycle.rawValue, forKey: SettingsKey.quarterCycle)
@@ -323,7 +298,7 @@ final class SharedSettingsCoordinator {
         using: .utf8),
       let sources = try? JSONDecoder().decode([String].self, from: data)
     else { return [] }
-    return sources
+    return sources.filter { !$0.hasPrefix("counter:") }
   }
 
   private func configuredBirthDateString() -> String? {

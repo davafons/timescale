@@ -89,10 +89,6 @@ enum SettingsKey {
   static let accent = "accent"
   static let dayStartMinutes = "dayStartMinutes"
   static let dayEndMinutes = "dayEndMinutes"
-  static let routineName = "routineName"
-  static let routineDurationMinutes = "routineDurationMinutes"
-  static let routineStartedTimestamp = "routineStartedTimestamp"
-  static let countersJSON = "countersJSON"
   static let statusItemSource = "statusItemSource"
   static let collapsedProgressSourcesJSON = "collapsedProgressSourcesJSON"
   static let lastInteractionTimestamp = "lastInteractionTimestamp"
@@ -102,6 +98,8 @@ enum SettingsKey {
   static let locationConfigured = "locationConfigured"
   static let latitude = "latitude"
   static let longitude = "longitude"
+  static let appleCalendarIDsJSON = "appleCalendarIDsJSON"
+  static let enableHEYCLI = "enableHEYCLI"
 }
 
 extension InteractionHistory {

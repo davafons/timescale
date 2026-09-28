@@ -22,8 +22,8 @@ use serde::Deserialize;
 use serde_json::json;
 use tachyonfx::{CellFilter, Duration as FxDuration, Effect, Interpolation, fx};
 use timescale_core::{
-    ConfigStore, CounterSettings, InteractionCheck, Period, QuarterCycle, Settings, Snapshot,
-    TuiMotion, TuiTheme, WeekStart, snapshot,
+    ConfigStore, InteractionCheck, Period, QuarterCycle, Settings, Snapshot, TuiMotion, TuiTheme,
+    WeekStart, snapshot,
 };
 
 mod settings_ui;
@@ -327,8 +327,7 @@ fn print_help() {
         "Timescale — see your time at a glance\n\n\
 Usage:\n  timescale [--config PATH]\n  timescale status [--json|--waybar]\n  \
 timescale config <path|show|edit>\n  timescale config set <KEY> <VALUE>\n  timescale doctor\n\n\
-The interactive view updates automatically. Use ↑/↓ to select, Page Up/Page Down to scroll, Enter to fold, s to select the status source, h for history, o to open a HEY event, w to start/pause, a to add, x to delete, r to reset, and e for settings.\n\
-Counter config keys include counter.add, counter.delete, and counter.<id>.name/targetMinutes/elapsedMinutes/startedAt."
+The interactive view updates automatically. Use ↑/↓ to select, Page Up/Page Down to scroll, Enter to fold, s to select the status source, h for history, o to open a HEY event, and e for settings."
     );
 }
 
@@ -367,9 +366,6 @@ fn print_status(
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else if waybar {
         let selected = settings.mac_os.status_item_source.as_str();
-        let selected_counter = selected
-            .strip_prefix("counter:")
-            .and_then(|id| value.counters.iter().find(|counter| counter.id == id));
         let selected_row = match selected {
             "week" => value.rows.iter().find(|row| row.period == Period::Week),
             "month" => value.rows.iter().find(|row| row.period == Period::Month),
@@ -381,9 +377,8 @@ fn print_status(
         let selected_row = selected_row
             .or_else(|| value.rows.iter().find(|row| row.period == Period::Day))
             .or_else(|| value.rows.first());
-        let percent = selected_counter
-            .map(|counter| counter.elapsed * 100.0)
-            .or_else(|| selected_row.map(|row| row.elapsed * 100.0))
+        let percent = selected_row
+            .map(|row| row.elapsed * 100.0)
             .ok_or_else(|| other_error("the selected Waybar source is not visible".into()))?;
         let tooltip = value
             .rows
@@ -397,23 +392,6 @@ fn print_status(
             })
             .collect::<Vec<_>>()
             .join("\n");
-        let counter_tooltip = value
-            .counters
-            .iter()
-            .map(|counter| format!("{}: {:.1}%", counter.name, counter.elapsed * 100.0))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let tooltip = if counter_tooltip.is_empty() {
-            value.routine.as_ref().map_or(tooltip.clone(), |routine| {
-                format!(
-                    "{tooltip}\n{}: {:.1}%",
-                    routine.name,
-                    routine.elapsed * 100.0
-                )
-            })
-        } else {
-            format!("{tooltip}\n{counter_tooltip}")
-        };
         let class = if percent < 33.0 {
             "early"
         } else if percent < 67.0 {
@@ -471,32 +449,6 @@ fn print_status(
                     sunset.format("%H:%M")
                 );
             }
-        }
-        for counter in &value.counters {
-            println!(
-                "{:<16} {:>6.1}%  {}",
-                counter.name,
-                counter.elapsed * 100.0,
-                if counter.complete {
-                    "complete".into()
-                } else if counter.running {
-                    format!("{} left", duration_label(counter.remaining_seconds))
-                } else {
-                    "paused".into()
-                }
-            );
-        }
-        if let Some(routine) = &value.routine {
-            println!(
-                "{:<16} {:>6.1}%  {}",
-                routine.name,
-                routine.elapsed * 100.0,
-                if routine.complete {
-                    "complete".into()
-                } else {
-                    format!("{} left", duration_label(routine.remaining_seconds))
-                }
-            );
         }
         if let Some(event) = current_event {
             println!(
@@ -570,67 +522,6 @@ fn set_value(settings: &mut Settings, key: &str, value: &str) -> Result<(), Box<
     match key {
         "day.start" => settings.day.start = value.into(),
         "day.end" => settings.day.end = value.into(),
-        "routine.name" => settings.routine.name = value.into(),
-        "routine.durationMinutes" => settings.routine.duration_minutes = value.parse()?,
-        "routine.startedAt" => {
-            settings.routine.started_at = if value == "null" || value.is_empty() {
-                None
-            } else {
-                Some(value.into())
-            }
-        }
-        "counter.add" => {
-            let id = new_counter_id();
-            settings.counters.push(CounterSettings {
-                id,
-                name: if value.trim().is_empty() {
-                    "New counter".into()
-                } else {
-                    value.into()
-                },
-                target_minutes: 60,
-                elapsed_seconds: 0.0,
-                started_at: None,
-            });
-        }
-        "counter.delete" => {
-            settings.counters.retain(|counter| counter.id != value);
-            settings
-                .awareness
-                .collapsed_sources
-                .retain(|source| source != &format!("counter:{value}"));
-            if settings.mac_os.status_item_source == format!("counter:{value}") {
-                settings.mac_os.status_item_source = "day".into();
-            }
-        }
-        key if key.starts_with("counter.") => {
-            let remainder = &key["counter.".len()..];
-            let (id, property) = remainder.split_once('.').ok_or_else(|| {
-                other_error("use counter.<id>.<name|targetMinutes|elapsedMinutes|startedAt>".into())
-            })?;
-            let counter = settings
-                .counters
-                .iter_mut()
-                .find(|counter| counter.id == id)
-                .ok_or_else(|| other_error(format!("unknown counter {id:?}")))?;
-            match property {
-                "name" => counter.name = value.into(),
-                "targetMinutes" => counter.target_minutes = value.parse()?,
-                "elapsedMinutes" => counter.elapsed_seconds = value.parse::<f64>()? * 60.0,
-                "startedAt" => {
-                    counter.started_at = if value == "null" || value.is_empty() {
-                        None
-                    } else {
-                        Some(value.into())
-                    }
-                }
-                _ => {
-                    return Err(other_error(format!(
-                        "unsupported counter property {property:?}"
-                    )));
-                }
-            }
-        }
         "week.startsOn" => {
             settings.week.starts_on = match value {
                 "monday" => WeekStart::Monday,
@@ -905,159 +796,11 @@ fn tui_loop(
                             reload_error = Some(error);
                         }
                     }
-                    KeyCode::Char('a') => {
-                        let id = new_counter_id();
-                        let mut candidate = settings.clone();
-                        candidate.counters.push(CounterSettings {
-                            id,
-                            name: "New counter".into(),
-                            target_minutes: 60,
-                            elapsed_seconds: 0.0,
-                            started_at: None,
-                        });
-                        if let Err(error) = store.save_if_unchanged(&candidate, &settings) {
-                            reload_error = Some(error);
-                        } else {
-                            settings = candidate;
-                            selected_source =
-                                value.rows.len() + settings.counters.len().saturating_sub(1);
-                        }
-                    }
-                    KeyCode::Char('x') if !settings.counters.is_empty() => {
-                        let Some(remove_index) =
-                            selected_counter_index(&sources, selected_source, &settings)
-                        else {
-                            continue;
-                        };
-                        let mut candidate = settings.clone();
-                        let removed_id = candidate.counters[remove_index].id.clone();
-                        candidate.counters.remove(remove_index);
-                        candidate
-                            .awareness
-                            .collapsed_sources
-                            .retain(|source| source != &format!("counter:{removed_id}"));
-                        if candidate.mac_os.status_item_source == format!("counter:{removed_id}") {
-                            candidate.mac_os.status_item_source = "day".into();
-                        }
-                        if let Err(error) = store.save_if_unchanged(&candidate, &settings) {
-                            reload_error = Some(error);
-                        } else {
-                            settings = candidate;
-                            selected_source = selected_source.min(sources.len().saturating_sub(1));
-                        }
-                    }
-                    KeyCode::Char('w') => {
-                        let result = if settings.counters.is_empty() {
-                            toggle_routine(&mut settings, store, Local::now())
-                        } else if let Some(counter_index) =
-                            selected_counter_index(&sources, selected_source, &settings)
-                        {
-                            toggle_counter(&mut settings, store, counter_index, Local::now())
-                        } else {
-                            Ok(())
-                        };
-                        if let Err(error) = result {
-                            reload_error = Some(error);
-                        }
-                    }
-                    KeyCode::Char('r') if !settings.counters.is_empty() => {
-                        if let Some(index) =
-                            selected_counter_index(&sources, selected_source, &settings)
-                            && let Err(error) = reset_counter(&mut settings, store, index)
-                        {
-                            reload_error = Some(error);
-                        }
-                    }
                     _ => {}
                 }
             }
         }
     }
-}
-
-fn toggle_routine(
-    settings: &mut Settings,
-    store: &ConfigStore,
-    now: DateTime<Local>,
-) -> Result<(), String> {
-    let is_running = settings
-        .routine
-        .started_at
-        .as_deref()
-        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
-        .map(|start| start + Duration::minutes(i64::from(settings.routine.duration_minutes)) > now)
-        .unwrap_or(false);
-    let mut candidate = settings.clone();
-    candidate.routine.started_at = if is_running {
-        None
-    } else {
-        Some(now.to_rfc3339())
-    };
-    store.save_if_unchanged(&candidate, settings)?;
-    *settings = candidate;
-    Ok(())
-}
-
-fn new_counter_id() -> String {
-    format!(
-        "counter-{}-{}",
-        std::process::id(),
-        chrono::Utc::now()
-            .timestamp_nanos_opt()
-            .unwrap_or_else(|| chrono::Utc::now().timestamp_micros() * 1_000)
-    )
-}
-
-fn toggle_counter(
-    settings: &mut Settings,
-    store: &ConfigStore,
-    index: usize,
-    now: DateTime<Local>,
-) -> Result<(), String> {
-    let Some(counter) = settings.counters.get(index) else {
-        return Ok(());
-    };
-    let current_elapsed = counter_elapsed(counter, now)?;
-    let mut candidate = settings.clone();
-    let counter = candidate.counters.get_mut(index).expect("index checked");
-    if current_elapsed >= f64::from(counter.target_minutes) * 60.0 {
-        counter.elapsed_seconds = 0.0;
-        counter.started_at = Some(now.to_rfc3339());
-    } else if counter.started_at.is_some() {
-        counter.elapsed_seconds = current_elapsed;
-        counter.started_at = None;
-    } else {
-        counter.started_at = Some(now.to_rfc3339());
-    }
-    store.save_if_unchanged(&candidate, settings)?;
-    *settings = candidate;
-    Ok(())
-}
-
-fn reset_counter(settings: &mut Settings, store: &ConfigStore, index: usize) -> Result<(), String> {
-    if settings.counters.get(index).is_none() {
-        return Ok(());
-    }
-    let mut candidate = settings.clone();
-    let counter = candidate.counters.get_mut(index).expect("index checked");
-    counter.elapsed_seconds = 0.0;
-    counter.started_at = None;
-    store.save_if_unchanged(&candidate, settings)?;
-    *settings = candidate;
-    Ok(())
-}
-
-fn counter_elapsed(counter: &CounterSettings, now: DateTime<Local>) -> Result<f64, String> {
-    let Some(started_at) = counter.started_at.as_deref() else {
-        return Ok(counter.elapsed_seconds);
-    };
-    let start = DateTime::parse_from_rfc3339(started_at)
-        .map_err(|_| "counter.startedAt is invalid".to_string())?
-        .with_timezone(&Local);
-    Ok(
-        (counter.elapsed_seconds + (now - start).num_milliseconds().max(0) as f64 / 1000.0)
-            .min(f64::from(counter.target_minutes) * 60.0),
-    )
 }
 
 fn period_source(period: Period) -> &'static str {
@@ -1077,28 +820,10 @@ fn dashboard_sources(snapshot: &Snapshot, event: Option<&CalendarEvent>) -> Vec<
         .iter()
         .map(|row| period_source(row.period).to_string())
         .collect::<Vec<_>>();
-    sources.extend(
-        snapshot
-            .counters
-            .iter()
-            .map(|counter| format!("counter:{}", counter.id)),
-    );
     if let Some(event) = event {
         sources.push(event.source());
     }
     sources
-}
-
-fn selected_counter_index(
-    sources: &[String],
-    selected: usize,
-    settings: &Settings,
-) -> Option<usize> {
-    let id = sources.get(selected)?.strip_prefix("counter:")?;
-    settings
-        .counters
-        .iter()
-        .position(|counter| counter.id == id)
 }
 
 fn is_selectable_status_source(source: &str, snapshot: &Snapshot) -> bool {
@@ -1304,7 +1029,7 @@ fn draw_history(frame: &mut ratatui::Frame<'_>, settings: &Settings, scroll: u16
                 duration_label(check.timestamp - checks[index - 1].0.timestamp)
             )
         };
-        let source = source_name(&check.source, settings);
+        let source = source_name(&check.source);
         let app = check
             .app_name
             .as_deref()
@@ -1340,15 +1065,7 @@ fn draw_history(frame: &mut ratatui::Frame<'_>, settings: &Settings, scroll: u16
     scroll
 }
 
-fn source_name(source: &str, settings: &Settings) -> String {
-    if let Some(id) = source.strip_prefix("counter:") {
-        return settings
-            .counters
-            .iter()
-            .find(|counter| counter.id == id)
-            .map(|counter| counter.name.clone())
-            .unwrap_or_else(|| "Deleted counter".into());
-    }
+fn source_name(source: &str) -> String {
     match source {
         "day" => "Day",
         "week" => "Week",
@@ -1356,7 +1073,7 @@ fn source_name(source: &str, settings: &Settings) -> String {
         "quarter" => "Quarter",
         "year" => "Year",
         "life" => "Life",
-        _ => "Unknown",
+        _ => "Unavailable source",
     }
     .into()
 }
@@ -1398,103 +1115,6 @@ fn draw(
         ]),
         Line::default(),
     ];
-    let mut counter_lines = Vec::new();
-    if !snapshot.counters.is_empty() {
-        counter_lines.push(Line::from(Span::styled("Counters", title_style)));
-    }
-
-    for counter in &snapshot.counters {
-        let source = format!("counter:{}", counter.id);
-        let collapsed = settings.awareness.collapsed_sources.contains(&source);
-        let percentage = format!(
-            "{:.*}%",
-            settings.mac_os.precision as usize,
-            counter.elapsed * 100.0
-        );
-        let remaining = if counter.complete {
-            "Complete".into()
-        } else if counter.running {
-            format!("{} left", duration_label(counter.remaining_seconds))
-        } else {
-            "Paused".into()
-        };
-        let marker = if selected_source == Some(source.as_str()) {
-            "▶ "
-        } else {
-            "  "
-        };
-        let fold = if collapsed { "▸ " } else { "▾ " };
-        let status = if settings.mac_os.status_item_source == source {
-            " ★"
-        } else {
-            ""
-        };
-        counter_lines.push(Line::from(vec![
-            Span::styled(format!("{marker}{fold}{}", counter.name), title_style),
-            Span::raw("  "),
-            Span::styled(remaining, Style::default().fg(muted)),
-            Span::raw(" ".repeat(4)),
-            Span::styled(format!("{percentage}{status}"), title_style),
-        ]));
-        if !collapsed {
-            counter_lines.push(progress_line(counter.elapsed, None, width, accent, muted));
-        }
-        if !compact && !collapsed {
-            counter_lines.push(Line::default());
-        }
-    }
-
-    if let Some(routine) = &snapshot.routine {
-        if snapshot.counters.is_empty() {
-            counter_lines.push(Line::from(Span::styled("Routine", title_style)));
-        }
-        let percentage = format!(
-            "{:.*}%",
-            settings.mac_os.precision as usize,
-            routine.elapsed * 100.0
-        );
-        let remaining = if routine.complete {
-            "Complete".into()
-        } else {
-            format!("{} left", duration_label(routine.remaining_seconds))
-        };
-        let equivalence = format!("1% = {}", duration_label(routine.duration_seconds / 100.0));
-        let routine_padding = width.saturating_sub(
-            routine.name.chars().count()
-                + remaining.chars().count()
-                + equivalence.chars().count()
-                + percentage.chars().count()
-                + 6,
-        );
-        counter_lines.push(Line::from(vec![
-            Span::styled(routine.name.clone(), title_style),
-            Span::raw("  "),
-            Span::styled(remaining, Style::default().fg(muted)),
-            Span::raw(" ".repeat(routine_padding.max(1))),
-            Span::styled(equivalence, Style::default().fg(muted)),
-            Span::raw("  "),
-            Span::styled(percentage, title_style),
-        ]));
-        if !compact {
-            counter_lines.push(Line::default());
-        }
-        if let (Ok(start), Ok(end)) = (
-            parse_date(&routine.started_at),
-            parse_date(&routine.ends_at),
-        ) {
-            counter_lines.push(Line::from(Span::styled(
-                align(
-                    &start.format("%H:%M").to_string(),
-                    &end.format("%H:%M").to_string(),
-                    width,
-                ),
-                Style::default().fg(muted),
-            )));
-        }
-        counter_lines.push(progress_line(routine.elapsed, None, width, accent, muted));
-        counter_lines.push(Line::default());
-    }
-
     for row in &snapshot.rows {
         let source = period_source(row.period);
         let collapsed = settings
@@ -1655,11 +1275,6 @@ fn draw(
         }
     }
 
-    if !counter_lines.is_empty() {
-        lines.push(section_divider(width, muted));
-        lines.extend(counter_lines);
-    }
-
     if let Some(event) = calendar_event {
         lines.push(section_divider(width, muted));
         let source = event.source();
@@ -1725,29 +1340,12 @@ fn draw(
         lines.extend(awareness_lines);
     }
 
-    let selected_counter = selected_source
-        .and_then(|source| source.strip_prefix("counter:"))
-        .and_then(|id| snapshot.counters.iter().find(|counter| counter.id == id));
-    let routine_action = match selected_counter {
-        Some(counter) if counter.complete => format!("w restart {}", counter.name),
-        Some(counter) if counter.running => format!("w pause {}", counter.name),
-        Some(counter) => format!("w start {}", counter.name),
-        None if !snapshot.counters.is_empty() => "select a counter for w".into(),
-        None => match &snapshot.routine {
-            Some(routine) if routine.complete => format!("w restart {}", routine.name),
-            Some(routine) => format!("w stop {}", routine.name),
-            None => format!("w start {}", settings.routine.name),
-        },
-    };
     let footer_left = reload_error.map_or_else(
         || {
-            format!(
-                "{routine_action} · ↑/↓ select · PgUp/PgDn scroll · Enter fold · s status · h history · e settings"
-            )
+            "↑/↓ select · PgUp/PgDn scroll · Enter fold · s status · h history · e settings"
+                .to_string()
         },
-        |error| {
-            format!("{routine_action} · ↑/↓ select · Enter fold · s status · h history · {error}")
-        },
+        |error| format!("↑/↓ select · Enter fold · s status · h history · {error}"),
     );
     lines.push(section_divider(width, muted));
     lines.push(Line::from(Span::styled(
@@ -2023,9 +1621,6 @@ fn other_error(message: String) -> Box<dyn Error> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     use chrono::TimeZone;
     use ratatui::backend::TestBackend;
 
@@ -2081,14 +1676,7 @@ mod tests {
 
     #[test]
     fn dashboard_navigation_follows_the_native_section_order() {
-        let mut settings = Settings::default();
-        settings.counters.push(CounterSettings {
-            id: "focus".into(),
-            name: "Focus".into(),
-            target_minutes: 60,
-            elapsed_seconds: 0.0,
-            started_at: None,
-        });
+        let settings = Settings::default();
         let value = snapshot(&settings, Local::now()).unwrap();
         let event_start = Local::now();
         let event = CalendarEvent {
@@ -2101,30 +1689,18 @@ mod tests {
         };
 
         let sources = dashboard_sources(&value, Some(&event));
-        let counter_index = sources
-            .iter()
-            .position(|source| source == "counter:focus")
-            .unwrap();
         let event_index = sources
             .iter()
             .position(|source| source == "hey-event:7")
             .unwrap();
 
         assert_eq!(sources.first().map(String::as_str), Some("day"));
-        assert!(counter_index > sources.iter().position(|source| source == "life").unwrap());
-        assert!(event_index > counter_index);
+        assert!(event_index > sources.iter().position(|source| source == "life").unwrap());
     }
 
     #[test]
     fn dashboard_renders_native_section_order_borders_and_check_context() {
         let mut settings = Settings::default();
-        settings.counters.push(CounterSettings {
-            id: "focus".into(),
-            name: "Focus".into(),
-            target_minutes: 60,
-            elapsed_seconds: 0.0,
-            started_at: None,
-        });
         settings.record_check(InteractionCheck {
             timestamp: Local::now().timestamp_millis() as f64 / 1000.0,
             source: "day".into(),
@@ -2160,9 +1736,8 @@ mod tests {
             .join("\n");
 
         let day = rendered.find("Day").unwrap();
-        let counters = rendered.find("Counters").unwrap();
         let checks = rendered.find("First check today").unwrap();
-        assert!(day < counters && counters < checks);
+        assert!(day < checks);
         assert!(rendered.contains("Your next check will show the time"));
         assert!(rendered.lines().any(|line| line.contains("─────")));
     }
@@ -2253,31 +1828,5 @@ mod tests {
         assert_eq!(day_duration_minutes("08:00", "23:00"), 15 * 60);
         assert_eq!(day_duration_minutes("22:00", "06:00"), 8 * 60);
         assert_eq!(day_duration_minutes("08:00", "08:00"), 24 * 60);
-    }
-
-    #[test]
-    fn routine_action_starts_and_stops_atomically() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "timescale-routine-{}-{unique}.json",
-            std::process::id()
-        ));
-        let store = ConfigStore::new(path.clone());
-        let mut settings = Settings::default();
-        let now = Local
-            .with_ymd_and_hms(2026, 9, 6, 8, 0, 0)
-            .single()
-            .unwrap();
-
-        toggle_routine(&mut settings, &store, now).unwrap();
-        assert!(settings.routine.started_at.is_some());
-        toggle_routine(&mut settings, &store, now).unwrap();
-        assert!(settings.routine.started_at.is_none());
-        assert!(store.load().unwrap().routine.started_at.is_none());
-
-        fs::remove_file(path).unwrap();
     }
 }

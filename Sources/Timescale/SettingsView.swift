@@ -134,13 +134,9 @@ struct SettingsView: View {
         .settingsRowInset()
       }
 
-      Section("Counters") {
-        Text(
-          "Create and configure counters from the menu-bar popover. Counters support start, pause, resume, reset, and manual elapsed-time adjustments."
-        )
-        .font(TypographyScale.detail)
-        .foregroundStyle(.secondary)
-        .settingsRowInset()
+      Section("Calendar") {
+        MacCalendarSettings()
+          .settingsRowInset()
       }
 
       Section("Sun") {

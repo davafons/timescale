@@ -208,7 +208,9 @@ private struct HistoryView: View {
   }
 
   private func detail(for check: InteractionHistory.Check) -> String {
-    let source = check.source.hasPrefix("counter:") ? "Custom counter" : check.source.capitalized
+    let source =
+      ["day", "week", "month", "quarter", "year", "life"].contains(check.source)
+      ? check.source.capitalized : "Unavailable source"
     if let appName = check.appName { return "\(source) · \(appName)" }
     return source
   }

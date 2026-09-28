@@ -12,6 +12,11 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 *.xcodeproj/
+!Timescale-iOS.xcodeproj/
+!Timescale-iOS.xcodeproj/project.pbxproj
+!Timescale-iOS.xcodeproj/xcshareddata/
+!Timescale-iOS.xcodeproj/xcshareddata/xcschemes/
+!Timescale-iOS.xcodeproj/xcshareddata/xcschemes/*.xcscheme
 *.dSYM/
 
 # Generated application and release artifacts

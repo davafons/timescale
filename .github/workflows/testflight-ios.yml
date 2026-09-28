@@ -1,0 +1,65 @@
+name: iOS TestFlight
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: timescale-ios-testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require App Store Connect credentials
+        run: |
+          set -euo pipefail
+          test -n "$APP_STORE_CONNECT_API_KEY_ID"
+          test -n "$APP_STORE_CONNECT_API_ISSUER_ID"
+          test -n "$APP_STORE_CONNECT_API_PRIVATE_KEY"
+      - name: Prepare App Store Connect key
+        id: key
+        run: |
+          key_path="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          printf '%s' "$APP_STORE_CONNECT_API_PRIVATE_KEY" > "$key_path"
+          chmod 600 "$key_path"
+          echo "path=$key_path" >> "$GITHUB_OUTPUT"
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate --spec project.ios.yml
+      - name: Archive
+        run: |
+          xcodebuild \
+            -project Timescale-iOS.xcodeproj \
+            -scheme TimescaleIOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/TimescaleIOS.xcarchive" \
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath '${{ steps.key.outputs.path }}' \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            archive
+      - name: Upload to TestFlight
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$RUNNER_TEMP/TimescaleIOS.xcarchive" \
+            -exportOptionsPlist ExportOptions-TestFlight.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath '${{ steps.key.outputs.path }}' \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"

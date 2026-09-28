@@ -15,8 +15,6 @@ use std::process::Command;
 enum Field {
     DayStart,
     DayEnd,
-    RoutineName,
-    RoutineDuration,
     WeekStart,
     QuarterCycle,
     SolarEnabled,
@@ -33,10 +31,6 @@ enum Field {
     ClearHistory,
     Theme,
     Motion,
-    CounterName(usize),
-    CounterDuration(usize),
-    CounterElapsed(usize),
-    CounterDelete(usize),
 }
 
 #[derive(Clone, Copy)]
@@ -46,7 +40,7 @@ struct FieldSpec {
     field: Field,
 }
 
-const BASE_FIELDS: [FieldSpec; 25] = [
+const BASE_FIELDS: [FieldSpec; 23] = [
     FieldSpec {
         section: "VISIBLE PROGRESS",
         label: "Day",
@@ -96,16 +90,6 @@ const BASE_FIELDS: [FieldSpec; 25] = [
         section: "WAKING DAY",
         label: "Ends",
         field: Field::DayEnd,
-    },
-    FieldSpec {
-        section: "ROUTINE",
-        label: "Name",
-        field: Field::RoutineName,
-    },
-    FieldSpec {
-        section: "ROUTINE",
-        label: "Duration",
-        field: Field::RoutineDuration,
     },
     FieldSpec {
         section: "SUN",
@@ -174,33 +158,8 @@ const BASE_FIELDS: [FieldSpec; 25] = [
     },
 ];
 
-fn fields(settings: &Settings) -> Vec<FieldSpec> {
-    let mut result = BASE_FIELDS.to_vec();
-    for index in 0..settings.counters.len() {
-        result.extend([
-            FieldSpec {
-                section: "COUNTERS",
-                label: "Name",
-                field: Field::CounterName(index),
-            },
-            FieldSpec {
-                section: "COUNTERS",
-                label: "Target",
-                field: Field::CounterDuration(index),
-            },
-            FieldSpec {
-                section: "COUNTERS",
-                label: "Elapsed",
-                field: Field::CounterElapsed(index),
-            },
-            FieldSpec {
-                section: "COUNTERS",
-                label: "Delete",
-                field: Field::CounterDelete(index),
-            },
-        ]);
-    }
-    result
+fn fields(_settings: &Settings) -> Vec<FieldSpec> {
+    BASE_FIELDS.to_vec()
 }
 
 struct EditState {
@@ -560,10 +519,7 @@ impl SettingsMenu {
 
     fn change_selected(&mut self, settings: &mut Settings, store: &ConfigStore, direction: i8) {
         let field = fields(settings)[self.selected].field;
-        if matches!(
-            field,
-            Field::RoutineName | Field::SolarLocation | Field::BirthDate
-        ) {
+        if matches!(field, Field::SolarLocation | Field::BirthDate) {
             self.notice = Some(("Press Enter to edit".into(), false));
             return;
         }
@@ -981,27 +937,18 @@ fn is_text_field(field: Field) -> bool {
         field,
         Field::DayStart
             | Field::DayEnd
-            | Field::RoutineName
-            | Field::RoutineDuration
             | Field::SolarLocation
             | Field::BirthDate
             | Field::Expectancy
-            | Field::CounterName(_)
-            | Field::CounterDuration(_)
-            | Field::CounterElapsed(_)
     )
 }
 
 fn edit_hint(field: Field) -> &'static str {
     match field {
         Field::DayStart | Field::DayEnd => "HH:MM",
-        Field::RoutineName => "name",
-        Field::RoutineDuration => "hours",
         Field::SolarLocation => "latitude, longitude · blank clears",
         Field::BirthDate => "YYYY-MM-DD · blank clears",
         Field::Expectancy => "years from 1 to 150",
-        Field::CounterName(_) => "name",
-        Field::CounterDuration(_) | Field::CounterElapsed(_) => "minutes",
         _ => "type a value",
     }
 }
@@ -1013,18 +960,6 @@ fn editable_value(field: Field, settings: &Settings) -> String {
             _ => String::new(),
         },
         Field::BirthDate => settings.life.birth_date.clone().unwrap_or_default(),
-        Field::RoutineDuration => {
-            let hours = f64::from(settings.routine.duration_minutes) / 60.0;
-            if hours.fract() == 0.0 {
-                format!("{hours:.0}")
-            } else {
-                format!("{hours:.2}").trim_end_matches('0').to_string()
-            }
-        }
-        Field::CounterDuration(index) => settings.counters[index].target_minutes.to_string(),
-        Field::CounterElapsed(index) => {
-            format!("{:.0}", settings.counters[index].elapsed_seconds / 60.0)
-        }
         Field::Expectancy if settings.life.expectancy_years.fract() == 0.0 => {
             format!("{:.0}", settings.life.expectancy_years)
         }
@@ -1037,8 +972,6 @@ fn field_value(field: Field, settings: &Settings) -> String {
     match field {
         Field::DayStart => settings.day.start.clone(),
         Field::DayEnd => settings.day.end.clone(),
-        Field::RoutineName => settings.routine.name.clone(),
-        Field::RoutineDuration => format_duration_minutes(settings.routine.duration_minutes),
         Field::WeekStart => match settings.week.starts_on {
             WeekStart::Monday => "Monday",
             WeekStart::Sunday => "Sunday",
@@ -1084,14 +1017,6 @@ fn field_value(field: Field, settings: &Settings) -> String {
             "{} checks · Enter to clear",
             settings.awareness.checks.len()
         ),
-        Field::CounterName(index) => settings.counters[index].name.clone(),
-        Field::CounterDuration(index) => {
-            format_duration_minutes(settings.counters[index].target_minutes)
-        }
-        Field::CounterElapsed(index) => {
-            format!("{} min", settings.counters[index].elapsed_seconds / 60.0)
-        }
-        Field::CounterDelete(index) => format!("Delete {}", settings.counters[index].name),
     }
 }
 
@@ -1099,33 +1024,21 @@ fn check(enabled: bool) -> String {
     if enabled { "[x]" } else { "[ ]" }.into()
 }
 
-fn status_sources(settings: &Settings) -> Vec<(String, String)> {
-    let mut sources = vec![
+fn status_sources(_settings: &Settings) -> Vec<(String, String)> {
+    vec![
         ("day".into(), "Waking day".into()),
         ("week".into(), "Week".into()),
         ("month".into(), "Month".into()),
         ("quarter".into(), "Quarter".into()),
         ("year".into(), "Year".into()),
         ("life".into(), "Life".into()),
-    ];
-    sources.extend(
-        settings
-            .counters
-            .iter()
-            .map(|counter| (format!("counter:{}", counter.id), counter.name.clone())),
-    );
-    sources
+    ]
 }
 
 fn change_field(field: Field, settings: &mut Settings, direction: i8) -> Result<(), String> {
     match field {
         Field::DayStart => settings.day.start = adjust_time(&settings.day.start, direction)?,
         Field::DayEnd => settings.day.end = adjust_time(&settings.day.end, direction)?,
-        Field::RoutineName => return Ok(()),
-        Field::RoutineDuration => {
-            let adjusted = i64::from(settings.routine.duration_minutes) + i64::from(direction) * 30;
-            settings.routine.duration_minutes = adjusted.clamp(1, 10_080) as u32;
-        }
         Field::WeekStart => {
             settings.week.starts_on = match settings.week.starts_on {
                 WeekStart::Monday => WeekStart::Sunday,
@@ -1186,20 +1099,6 @@ fn change_field(field: Field, settings: &mut Settings, direction: i8) -> Result<
                 (settings.life.expectancy_years + f64::from(direction)).clamp(1.0, 150.0)
         }
         Field::SolarLocation | Field::BirthDate => return Ok(()),
-        Field::CounterName(_) | Field::CounterDuration(_) | Field::CounterElapsed(_) => {
-            return Ok(());
-        }
-        Field::CounterDelete(index) => {
-            let removed_id = settings.counters[index].id.clone();
-            settings.counters.remove(index);
-            settings
-                .awareness
-                .collapsed_sources
-                .retain(|source| source != &format!("counter:{removed_id}"));
-            if settings.mac_os.status_item_source == format!("counter:{removed_id}") {
-                settings.mac_os.status_item_source = "day".into();
-            }
-        }
     }
     settings.validate()
 }
@@ -1214,14 +1113,6 @@ fn save_text_value(
     match field {
         Field::DayStart => candidate.day.start = value.trim().into(),
         Field::DayEnd => candidate.day.end = value.trim().into(),
-        Field::RoutineName => candidate.routine.name = value.trim().into(),
-        Field::RoutineDuration => {
-            let hours: f64 = value
-                .trim()
-                .parse()
-                .map_err(|_| "Invalid routine duration".to_string())?;
-            candidate.routine.duration_minutes = (hours * 60.0).round() as u32;
-        }
         Field::SolarLocation => {
             if value.trim().is_empty() || value.trim().eq_ignore_ascii_case("off") {
                 candidate.solar.latitude = None;
@@ -1254,28 +1145,6 @@ fn save_text_value(
                 .parse()
                 .map_err(|_| "Invalid life expectancy".to_string())?
         }
-        Field::CounterName(index) => candidate.counters[index].name = value.trim().into(),
-        Field::CounterDuration(index) => {
-            candidate.counters[index].target_minutes = value
-                .trim()
-                .parse()
-                .map_err(|_| "Invalid counter duration".to_string())?;
-        }
-        Field::CounterElapsed(index) => {
-            candidate.counters[index].elapsed_seconds = value
-                .trim()
-                .parse::<f64>()
-                .map_err(|_| "Invalid counter elapsed time".to_string())?
-                * 60.0;
-            candidate.counters[index].started_at = None;
-        }
-        Field::CounterDelete(index) => {
-            let removed_id = candidate.counters[index].id.clone();
-            candidate.counters.remove(index);
-            if candidate.mac_os.status_item_source == format!("counter:{removed_id}") {
-                candidate.mac_os.status_item_source = "day".into();
-            }
-        }
         _ => return Err("This setting is changed with arrows or Space".into()),
     }
     candidate.validate()?;
@@ -1290,16 +1159,6 @@ fn adjust_time(value: &str, direction: i8) -> Result<String, String> {
         + minutes.parse::<i32>().map_err(|_| "Invalid minute")?;
     let adjusted = (total + i32::from(direction) * 15).rem_euclid(24 * 60);
     Ok(format!("{:02}:{:02}", adjusted / 60, adjusted % 60))
-}
-
-fn format_duration_minutes(minutes: u32) -> String {
-    let hours = minutes / 60;
-    let remainder = minutes % 60;
-    match (hours, remainder) {
-        (0, minutes) => format!("{minutes} min"),
-        (hours, 0) => format!("{hours} hr"),
-        (hours, minutes) => format!("{hours} hr {minutes} min"),
-    }
 }
 
 fn toggle_period(visible: &mut Vec<Period>, period: Period) {
@@ -1422,7 +1281,6 @@ mod tests {
     fn numeric_edit_values_do_not_include_display_units() {
         let settings = Settings::default();
         assert_eq!(editable_value(Field::Expectancy, &settings), "84");
-        assert_eq!(editable_value(Field::RoutineDuration, &settings), "8");
     }
 
     #[test]
@@ -1455,8 +1313,6 @@ mod tests {
                 "Life estimate",
                 "Starts",
                 "Ends",
-                "Name",
-                "Duration",
                 "Show sunrise and sunset",
                 "Location",
                 "Birth date",

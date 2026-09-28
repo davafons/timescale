@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
   name: "Timescale",
-  platforms: [.macOS(.v14)],
+  platforms: [.macOS(.v14), .iOS(.v18)],
   products: [
     .library(name: "TimescaleCore", targets: ["TimescaleCore"]),
     .executable(name: "Timescale", targets: ["Timescale"]),

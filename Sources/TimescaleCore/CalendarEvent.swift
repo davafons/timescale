@@ -8,6 +8,9 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
   public let start: Date
   public let end: Date
   public let allDay: Bool
+  public let source: String
+  public let externalUID: String?
+  public let stableID: String
 
   public init(
     id: Int,
@@ -16,7 +19,10 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
     editURL: URL? = nil,
     start: Date,
     end: Date,
-    allDay: Bool = false
+    allDay: Bool = false,
+    source: String = "HEY",
+    externalUID: String? = nil,
+    stableID: String? = nil
   ) {
     self.id = id
     self.title = title
@@ -25,6 +31,9 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
     self.start = start
     self.end = end
     self.allDay = allDay
+    self.source = source
+    self.externalUID = externalUID
+    self.stableID = stableID ?? "hey:\(id)"
   }
 
   public func progress(at date: Date) -> Double {

@@ -6,8 +6,6 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
   public var version: Int
   public var timeZone: String
   public var day: SharedDaySettings
-  public var routine: SharedRoutineSettings
-  public var counters: [SharedCounter]
   public var week: SharedWeekSettings
   public var quarter: SharedQuarterSettings
   public var solar: SharedSolarSettings
@@ -18,7 +16,7 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
   public var awareness: SharedAwarenessSettings
 
   private enum CodingKeys: String, CodingKey {
-    case version, timeZone, day, routine, counters, week, quarter, solar, life, visible, macOS, tui,
+    case version, timeZone, day, week, quarter, solar, life, visible, macOS, tui,
       awareness
   }
 
@@ -26,8 +24,6 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     version: Int = currentVersion,
     timeZone: String = "local",
     day: SharedDaySettings = .init(),
-    routine: SharedRoutineSettings = .init(),
-    counters: [SharedCounter] = [],
     week: SharedWeekSettings = .init(),
     quarter: SharedQuarterSettings = .init(),
     solar: SharedSolarSettings = .init(),
@@ -40,8 +36,6 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     self.version = version
     self.timeZone = timeZone
     self.day = day
-    self.routine = routine
-    self.counters = counters
     self.week = week
     self.quarter = quarter
     self.solar = solar
@@ -57,8 +51,6 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     version = try container.decodeIfPresent(Int.self, forKey: .version) ?? Self.currentVersion
     timeZone = try container.decodeIfPresent(String.self, forKey: .timeZone) ?? "local"
     day = try container.decodeIfPresent(SharedDaySettings.self, forKey: .day) ?? .init()
-    routine = try container.decodeIfPresent(SharedRoutineSettings.self, forKey: .routine) ?? .init()
-    counters = try container.decodeIfPresent([SharedCounter].self, forKey: .counters) ?? []
     week = try container.decodeIfPresent(SharedWeekSettings.self, forKey: .week) ?? .init()
     quarter = try container.decodeIfPresent(SharedQuarterSettings.self, forKey: .quarter) ?? .init()
     solar = try container.decodeIfPresent(SharedSolarSettings.self, forKey: .solar) ?? .init()
@@ -66,9 +58,13 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     visible =
       try container.decodeIfPresent([SharedPeriod].self, forKey: .visible) ?? SharedPeriod.allCases
     macOS = try container.decodeIfPresent(SharedMacOSSettings.self, forKey: .macOS) ?? .init()
+    if macOS.statusItemSource.hasPrefix("counter:") {
+      macOS.statusItemSource = "day"
+    }
     tui = try container.decodeIfPresent(SharedTUISettings.self, forKey: .tui) ?? .init()
     awareness =
       try container.decodeIfPresent(SharedAwarenessSettings.self, forKey: .awareness) ?? .init()
+    awareness.collapsedSources.removeAll { $0.hasPrefix("counter:") }
   }
 
   public func validate() throws {
@@ -80,27 +76,6 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
     }
     _ = try Self.minutes(day.start)
     _ = try Self.minutes(day.end)
-    guard !routine.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw SharedConfigurationError.invalid("routine.name must not be empty.")
-    }
-    guard (1...10_080).contains(routine.durationMinutes) else {
-      throw SharedConfigurationError.invalid("routine.durationMinutes must be between 1 and 10080.")
-    }
-    guard counters.count <= 100 else {
-      throw SharedConfigurationError.invalid("counters must contain at most 100 items.")
-    }
-    var counterIDs = Set<String>()
-    for counter in counters {
-      guard counterIDs.insert(counter.id).inserted else {
-        throw SharedConfigurationError.invalid("counters must not contain duplicate IDs.")
-      }
-      try counter.validate()
-    }
-    if let startedAt = routine.startedAt,
-      ISO8601DateFormatter().date(from: startedAt) == nil
-    {
-      throw SharedConfigurationError.invalid("routine.startedAt must be an RFC 3339 timestamp.")
-    }
     guard (0...3).contains(macOS.precision) else {
       throw SharedConfigurationError.invalid("macOS.precision must be between 0 and 3.")
     }
@@ -120,11 +95,7 @@ public struct SharedConfiguration: Codable, Equatable, Sendable {
       throw SharedConfigurationError.invalid("macOS.accent is not supported.")
     }
     let source = macOS.statusItemSource
-    let validSource =
-      ["day", "week", "month", "quarter", "year", "life"].contains(source)
-      || source.split(separator: ":", maxSplits: 1).count == 2
-        && source.hasPrefix("counter:")
-        && counters.contains { $0.id == String(source.dropFirst("counter:".count)) }
+    let validSource = ["day", "week", "month", "quarter", "year", "life"].contains(source)
     guard validSource else {
       throw SharedConfigurationError.invalid(
         "macOS.statusItemSource is not a known progress source.")
@@ -199,68 +170,6 @@ public struct SharedDaySettings: Codable, Equatable, Sendable {
   public init(start: String = "08:00", end: String = "23:00") {
     self.start = start
     self.end = end
-  }
-}
-
-public struct SharedRoutineSettings: Codable, Equatable, Sendable {
-  public var name: String
-  public var durationMinutes: Int
-  public var startedAt: String?
-
-  public init(name: String = "Work", durationMinutes: Int = 8 * 60, startedAt: String? = nil) {
-    self.name = name
-    self.durationMinutes = durationMinutes
-    self.startedAt = startedAt
-  }
-}
-
-public struct SharedCounter: Codable, Equatable, Sendable, Identifiable {
-  public var id: String
-  public var name: String
-  public var targetMinutes: Int
-  public var elapsedSeconds: Double
-  public var startedAt: String?
-
-  public init(
-    id: String = UUID().uuidString,
-    name: String = "Work",
-    targetMinutes: Int = 8 * 60,
-    elapsedSeconds: Double = 0,
-    startedAt: String? = nil
-  ) {
-    self.id = id
-    self.name = name
-    self.targetMinutes = targetMinutes
-    self.elapsedSeconds = elapsedSeconds
-    self.startedAt = startedAt
-  }
-
-  public func validate() throws {
-    guard !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw SharedConfigurationError.invalid("counter.id must not be empty.")
-    }
-    guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw SharedConfigurationError.invalid("counter.name must not be empty.")
-    }
-    guard (1...10_080).contains(targetMinutes) else {
-      throw SharedConfigurationError.invalid("counter.targetMinutes must be between 1 and 10080.")
-    }
-    guard elapsedSeconds.isFinite, elapsedSeconds >= 0 else {
-      throw SharedConfigurationError.invalid("counter.elapsedSeconds must be non-negative.")
-    }
-    if let startedAt, ISO8601DateFormatter().date(from: startedAt) == nil {
-      throw SharedConfigurationError.invalid("counter.startedAt must be an RFC 3339 timestamp.")
-    }
-  }
-
-  public func elapsed(at date: Date) -> Double {
-    guard let startedAt, let start = ISO8601DateFormatter().date(from: startedAt) else {
-      return min(elapsedSeconds, Double(targetMinutes * 60))
-    }
-    return min(
-      max(elapsedSeconds + max(date.timeIntervalSince(start), 0), 0),
-      Double(targetMinutes * 60)
-    )
   }
 }
 

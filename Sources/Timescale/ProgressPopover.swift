@@ -26,7 +26,6 @@ struct ProgressPopover: View {
   @AppStorage(SettingsKey.accent) private var accentRawValue = AccentChoice.system.rawValue
   @AppStorage(SettingsKey.dayStartMinutes) private var dayStartMinutes = 8 * 60
   @AppStorage(SettingsKey.dayEndMinutes) private var dayEndMinutes = 23 * 60
-  @AppStorage(SettingsKey.countersJSON) private var countersJSON = "[]"
   @AppStorage(SettingsKey.statusItemSource) private var statusItemSource = "day"
   @AppStorage(SettingsKey.collapsedProgressSourcesJSON)
   private var collapsedProgressSourcesJSON = "[]"
@@ -36,16 +35,6 @@ struct ProgressPopover: View {
   @AppStorage(SettingsKey.locationConfigured) private var locationConfigured = false
   @AppStorage(SettingsKey.latitude) private var latitude = 0.0
   @AppStorage(SettingsKey.longitude) private var longitude = 0.0
-  @State private var editingCounter: SharedCounter?
-  @State private var isAddingCounter = false
-
-  private var counters: [SharedCounter] {
-    guard let data = countersJSON.data(using: .utf8),
-      let value = try? JSONDecoder().decode([SharedCounter].self, from: data)
-    else { return [] }
-    return value
-  }
-
   private var collapsedProgressSources: Set<String> {
     guard let data = collapsedProgressSourcesJSON.data(using: .utf8),
       let sources = try? JSONDecoder().decode([String].self, from: data)
@@ -145,27 +134,6 @@ struct ProgressPopover: View {
             lifeRow(at: context.date)
           }
 
-          Divider()
-
-          VStack(alignment: .leading, spacing: LayoutScale.medium) {
-            HStack {
-              Text("Counters")
-                .font(TypographyScale.rowTitle)
-              Spacer()
-              Button {
-                isAddingCounter = true
-              } label: {
-                Label("Add counter", systemImage: "plus.circle")
-              }
-              .buttonStyle(.plain)
-              .foregroundStyle(.secondary)
-            }
-
-            ForEach(counters) { counter in
-              counterRow(counter, at: context.date)
-            }
-          }
-
           if let event = calendarProvider.currentEvent, event.isOngoing(at: context.date) {
             Divider()
             calendarEventRow(event, at: context.date)
@@ -230,129 +198,7 @@ struct ProgressPopover: View {
       }
       .padding(LayoutScale.xLarge)
       .frame(width: LayoutScale.popoverWidth)
-      .sheet(item: $editingCounter) { counter in
-        CounterEditor(
-          counter: counter, isNew: false,
-          onDelete: {
-            saveCounters(counters.filter { $0.id != counter.id })
-          }
-        ) { updated in
-          replaceCounter(updated)
-        }
-      }
-      .sheet(isPresented: $isAddingCounter) {
-        CounterEditor(counter: SharedCounter(), isNew: true) { counter in
-          var updated = counters
-          updated.append(counter)
-          saveCounters(updated)
-        }
-      }
     }
-  }
-
-  @ViewBuilder
-  private func counterRow(_ counter: SharedCounter, at date: Date) -> some View {
-    let source = "counter:\(counter.id)"
-    let elapsedSeconds = counter.elapsed(at: date)
-    let duration = TimeInterval(counter.targetMinutes * 60)
-    let start = counter.startedAt.flatMap { ISO8601DateFormatter().date(from: $0) }
-    let rangeStart = start ?? date.addingTimeInterval(-elapsedSeconds)
-    let progress = TimeProgress(
-      elapsed: duration > 0 ? elapsedSeconds / duration : 0,
-      start: rangeStart,
-      end: rangeStart.addingTimeInterval(duration)
-    )
-    VStack(alignment: .leading, spacing: LayoutScale.small) {
-      ProgressRow(
-        title: counter.name,
-        progress: progress,
-        period: .counter,
-        showRemaining: false,
-        precision: precision,
-        accent: accent,
-        isCollapsed: isProgressCollapsed(source),
-        isStatusSource: statusItemSource == source,
-        onToggleCollapsed: { toggleProgress(source) },
-        onSelect: { selectSource(source) }
-      )
-      if !isProgressCollapsed(source) {
-        HStack {
-          Button(
-            counter.startedAt == nil ? (elapsedSeconds >= duration ? "Restart" : "Start") : "Pause"
-          ) {
-            toggleCounter(counter)
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(.secondary)
-          Button("Edit") { editingCounter = counter }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-          if elapsedSeconds > 0 {
-            Button("Reset") { resetCounter(counter) }
-              .buttonStyle(.plain)
-              .foregroundStyle(.secondary)
-          }
-          Spacer()
-          Text(formatCounterDuration(elapsedSeconds) + " / " + formatCounterDuration(duration))
-            .foregroundStyle(.secondary)
-            .font(TypographyScale.action)
-        }
-      }
-    }
-  }
-
-  private func formatCounterDuration(_ seconds: TimeInterval) -> String {
-    let minutes = max(Int(seconds / 60), 0)
-    let hours = minutes / 60
-    let remainder = minutes % 60
-    if hours == 0 { return "\(remainder) min" }
-    if remainder == 0 { return "\(hours) hr" }
-    return "\(hours) hr \(remainder) min"
-  }
-
-  private func toggleCounter(_ counter: SharedCounter) {
-    var updated = counter
-    let currentElapsed = counter.elapsed(at: Date())
-    if currentElapsed >= Double(counter.targetMinutes * 60) {
-      updated.elapsedSeconds = 0
-      updated.startedAt = ISO8601DateFormatter().string(from: Date())
-    } else if counter.startedAt != nil {
-      updated.elapsedSeconds = currentElapsed
-      updated.startedAt = nil
-    } else {
-      updated.startedAt = ISO8601DateFormatter().string(from: Date())
-    }
-    replaceCounter(updated)
-  }
-
-  private func replaceCounter(_ counter: SharedCounter) {
-    saveCounters(counters.map { $0.id == counter.id ? counter : $0 })
-  }
-
-  private func resetCounter(_ counter: SharedCounter) {
-    var updated = counter
-    updated.elapsedSeconds = 0
-    updated.startedAt = nil
-    replaceCounter(updated)
-  }
-
-  private func saveCounters(_ value: [SharedCounter]) {
-    if statusItemSource.hasPrefix("counter:"),
-      !value.contains(where: { "counter:\($0.id)" == statusItemSource })
-    {
-      statusItemSource = "day"
-    }
-    let activeSources = Set(value.map { "counter:\($0.id)" })
-    let retainedCollapsedSources = collapsedProgressSources.filter {
-      !$0.hasPrefix("counter:") || activeSources.contains($0)
-    }
-    if retainedCollapsedSources != collapsedProgressSources {
-      saveCollapsedProgressSources(retainedCollapsedSources)
-    }
-    guard let data = try? JSONEncoder().encode(value),
-      let string = String(data: data, encoding: .utf8)
-    else { return }
-    countersJSON = string
   }
 
   @ViewBuilder
@@ -407,7 +253,7 @@ struct ProgressPopover: View {
   private func calendarEventRow(
     _ event: CalendarEvent, at date: Date, upcomingProgress: TimeProgress? = nil
   ) -> some View {
-    let source = "hey-event:\(event.id)"
+    let source = "calendar-event:\(event.stableID)"
     let progress =
       upcomingProgress
       ?? TimeProgress(
@@ -416,7 +262,7 @@ struct ProgressPopover: View {
       ProgressRow(
         title: upcomingProgress == nil ? event.title : "Next up: \(event.title)",
         detail: upcomingProgress == nil
-          ? "HEY event"
+          ? event.source
           : "Starts \(event.start.formatted(date: .omitted, time: .shortened))",
         progress: progress,
         period: .event,
@@ -649,18 +495,14 @@ struct ProgressPopover: View {
   }
 
   private var checkSourceNames: [String: String] {
-    var names = Dictionary(uniqueKeysWithValues: [
+    Dictionary(uniqueKeysWithValues: [
       ("day", "Day"), ("week", "Week"), ("month", "Month"),
       ("quarter", "Quarter"), ("year", "Year"), ("life", "Life"),
     ])
-    for counter in counters {
-      names["counter:\(counter.id)"] = counter.name
-    }
-    return names
   }
 
   private func sourceLabel(_ source: String) -> String {
-    checkSourceNames[source] ?? (source.hasPrefix("counter:") ? "Deleted counter" : "Unknown")
+    checkSourceNames[source] ?? "Unavailable source"
   }
 
   private func wakingDayPercentage(from start: Date, to end: Date) -> Double {
@@ -923,7 +765,6 @@ private enum ProgressPeriod {
   case quarter
   case year
   case life
-  case counter
   case event
 }
 
@@ -987,120 +828,7 @@ private struct CheckHistoryView: View {
   }
 
   private func sourceLabel(_ source: String) -> String {
-    sourceNames[source] ?? (source.hasPrefix("counter:") ? "Deleted counter" : "Unknown")
-  }
-}
-
-private struct CounterEditor: View {
-  @Environment(\.dismiss) private var dismiss
-  @State private var counter: SharedCounter
-  @State private var targetHours: Int
-  @State private var targetMinuteComponent: Int
-  @State private var elapsedHours: Int
-  @State private var elapsedMinuteComponent: Int
-  @State private var isRunning: Bool
-  let isNew: Bool
-  let onDelete: (() -> Void)?
-  let onSave: (SharedCounter) -> Void
-
-  init(
-    counter: SharedCounter,
-    isNew: Bool,
-    onDelete: (() -> Void)? = nil,
-    onSave: @escaping (SharedCounter) -> Void
-  ) {
-    var editable = counter
-    editable.elapsedSeconds = counter.elapsed(at: Date())
-    editable.startedAt = nil
-    _counter = State(initialValue: editable)
-    _targetHours = State(initialValue: editable.targetMinutes / 60)
-    _targetMinuteComponent = State(initialValue: editable.targetMinutes % 60)
-    let elapsedMinutes = max(Int(editable.elapsedSeconds.rounded() / 60), 0)
-    _elapsedHours = State(initialValue: elapsedMinutes / 60)
-    _elapsedMinuteComponent = State(initialValue: elapsedMinutes % 60)
-    _isRunning = State(initialValue: counter.startedAt != nil)
-    self.isNew = isNew
-    self.onDelete = onDelete
-    self.onSave = onSave
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: LayoutScale.large) {
-      Text(isNew ? "Add counter" : "Edit counter")
-        .font(TypographyScale.heading)
-      TextField("Counter name", text: $counter.name)
-      durationFields(
-        title: "Target duration",
-        hours: $targetHours,
-        minutes: $targetMinuteComponent)
-      durationFields(
-        title: "Elapsed time",
-        hours: $elapsedHours,
-        minutes: $elapsedMinuteComponent)
-      Toggle(isNew ? "Start now" : "Keep running", isOn: $isRunning)
-      Text("Durations use hours and minutes. You can adjust elapsed time before saving.")
-        .font(TypographyScale.detail)
-        .foregroundStyle(.secondary)
-      HStack {
-        Spacer()
-        Button("Cancel") { dismiss() }
-        if !isNew, let onDelete {
-          Button("Delete", role: .destructive) {
-            onDelete()
-            dismiss()
-          }
-        }
-        Button("Save") {
-          counter.targetMinutes = targetDuration
-          counter.elapsedSeconds = Double(min(elapsedDuration, targetDuration) * 60)
-          counter.startedAt =
-            isRunning
-            ? ISO8601DateFormatter().string(from: Date())
-            : nil
-          onSave(counter)
-          dismiss()
-        }
-        .keyboardShortcut(.defaultAction)
-        .disabled(counter.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-      }
-    }
-    .padding(LayoutScale.xxLarge)
-    .frame(width: 390)
-  }
-
-  private func durationFields(
-    title: String,
-    hours: Binding<Int>,
-    minutes: Binding<Int>
-  ) -> some View {
-    VStack(alignment: .leading, spacing: LayoutScale.small) {
-      Text(title)
-        .font(TypographyScale.rowTitle)
-      HStack(spacing: LayoutScale.small) {
-        TextField("Hours", value: hours, format: .number)
-          .multilineTextAlignment(.trailing)
-          .frame(width: 68)
-        Text("hr")
-          .foregroundStyle(.secondary)
-        TextField("Minutes", value: minutes, format: .number)
-          .multilineTextAlignment(.trailing)
-          .frame(width: 68)
-        Text("min")
-          .foregroundStyle(.secondary)
-      }
-    }
-  }
-
-  private var targetDuration: Int {
-    let hours = min(max(targetHours, 0), 168)
-    let minutes = min(max(targetMinuteComponent, 0), 59)
-    return min(max(hours * 60 + minutes, 1), 10_080)
-  }
-
-  private var elapsedDuration: Int {
-    let hours = max(elapsedHours, 0)
-    let minutes = min(max(elapsedMinuteComponent, 0), 59)
-    return max(hours * 60 + minutes, 0)
+    sourceNames[source] ?? "Unavailable source"
   }
 }
 

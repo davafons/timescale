@@ -22,7 +22,6 @@ No account, analytics, or runtime network requests. Just a useful glance at the 
 ## What it shows
 
 - **Waking day** — choose when your day starts and ends instead of counting sleep as usable time.
-- **One-click routine** — start a named duration such as an eight-hour workday and follow its persistent progress bar.
 - **Sunlight** — see sunrise and sunset within that same waking-day timeline.
 - **Week, month, quarter, and year** — elapsed percentage, time remaining, and what one percent means in human units.
 - **Calendar or Japan fiscal quarters** — choose Jan–Dec numbering or Japan's Apr–Mar fiscal year.
@@ -102,18 +101,16 @@ Running `timescale` opens the live TUI. It refreshes progress and shared setting
 - `←`/`→` or Space: change a toggle, choice, time, or number
 - Enter: open a searchable picker or edit an exact value, then validate and save
 - `g` on Location: request current coordinates through the native macOS app
-- `w` on the dashboard: start, stop, or restart the configured routine
 - `↑`/`↓` or `j`/`k` on the dashboard: select a progress source
 - Enter or Space on the dashboard: collapse or expand the selected source
 - `s` on the dashboard: use the selected source for status integrations and the Mac menu bar
 - `h` on the dashboard: open check-in history
 - Page Up/Page Down on the dashboard or history: scroll; Home returns to the top
 - `o` on a selected HEY event: open the event in HEY
-- `a` on the dashboard: add a counter; `w`, `r`, and `x` operate on the selected counter
 - Escape: cancel an edit or return to the dashboard
 - `q`: quit from either screen
 
-The settings list follows the native app's order—visible progress, waking day, counters, sun, life estimate, appearance, and time awareness—with terminal-only preferences last. It scrolls automatically in smaller terminals. Countries and other fixed choices use filtered pickers; numeric editors contain only the value, while units remain presentation text. On macOS, current-location requests are handed to the native app's Core Location flow and arrive through the shared configuration. Other platforms retain offline coordinate entry rather than contacting an IP-geolocation service. `timescale config edit` remains available for advanced direct JSON editing.
+The settings list follows the native app's order—visible progress, waking day, sun, life estimate, appearance, and time awareness—with terminal-only preferences last. It scrolls automatically in smaller terminals. Countries and other fixed choices use filtered pickers; numeric editors contain only the value, while units remain presentation text. On macOS, current-location requests are handed to the native app's Core Location flow and arrive through the shared configuration. Other platforms retain offline coordinate entry rather than contacting an IP-geolocation service. `timescale config edit` remains available for advanced direct JSON editing.
 
 ```sh
 timescale
@@ -164,7 +161,7 @@ Timescale works offline. It requests approximate location only after you press *
 
 Solar times are an offline astronomical approximation. They may differ slightly from official sources, especially near polar regions; saved coordinates are assumed to use the Mac's current time zone.
 
-Birth date, country, life expectancy, waking hours, routine start time, approximate coordinates, and appearance preferences are stored unencrypted in local settings. The native app mirrors shared values between macOS `UserDefaults` and the JSON configuration. The life bar is a visualization of an editable population average—not a medical or personal prediction.
+Birth date, country, life expectancy, waking hours, approximate coordinates, and appearance preferences are stored unencrypted in local settings. The native app mirrors shared values between macOS `UserDefaults` and the JSON configuration. The life bar is a visualization of an editable population average—not a medical or personal prediction.
 
 Country defaults are rounded from the World Bank's 2024 [life expectancy at birth](https://data.worldbank.org/indicator/SP.DYN.LE00.IN) dataset (CC BY 4.0).
 

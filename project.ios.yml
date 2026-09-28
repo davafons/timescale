@@ -1,0 +1,82 @@
+name: Timescale-iOS
+options:
+  bundleIdPrefix: com.davafons
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "27.0"
+packages:
+  TimescaleCore:
+    path: .
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    DEVELOPMENT_TEAM: XXL4Q6P4T4
+    CODE_SIGN_STYLE: Automatic
+targets:
+  TimescaleIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: iOS/App
+      - path: iOS/Shared
+      - path: iOS/Assets.xcassets
+      - path: Resources/PrivacyInfo.xcprivacy
+    dependencies:
+      - package: TimescaleCore
+        product: TimescaleCore
+      - target: TimescaleWidgets
+        embed: true
+    entitlements:
+      path: iOS/TimescaleIOS.entitlements
+    info:
+      path: iOS/Info.plist
+      properties:
+        CFBundleDisplayName: Timescale
+        LSApplicationCategoryType: public.app-category.productivity
+        NSCalendarsFullAccessUsageDescription: Timescale reads your selected calendars to show current and upcoming events.
+        NSLocationWhenInUseUsageDescription: Timescale uses your location to calculate nearby sunrise and sunset times.
+        NSSupportsLiveActivities: true
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: com.davafons.timescale.ios
+            CFBundleURLSchemes:
+              - timescale
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.davafons.timescale.ios
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        SUPPORTS_MACCATALYST: NO
+    scheme:
+      testTargets: []
+  TimescaleWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: iOS/Widgets
+      - path: iOS/Shared
+    dependencies:
+      - package: TimescaleCore
+        product: TimescaleCore
+    entitlements:
+      path: iOS/TimescaleIOS.entitlements
+    info:
+      path: iOS/Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Timescale Widgets
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.davafons.timescale.ios.widgets
+        APPLICATION_EXTENSION_API_ONLY: YES
+        GENERATE_INFOPLIST_FILE: YES

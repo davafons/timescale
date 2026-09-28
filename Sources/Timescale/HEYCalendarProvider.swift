@@ -1,3 +1,4 @@
+import EventKit
 import Foundation
 import TimescaleCore
 
@@ -12,9 +13,16 @@ final class HEYCalendarProvider: ObservableObject {
   private var cachedEvents: [CalendarEvent] = []
   private var lastRefreshAttempt: Date?
   private var isRefreshing = false
+  private let eventStore = EKEventStore()
+  private var selectionObserver: NSObjectProtocol?
 
   func start() {
     refresh()
+    selectionObserver = NotificationCenter.default.addObserver(
+      forName: .timescaleCalendarSelectionChanged, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.refresh() }
+    }
     timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) {
       [weak self] _ in
       MainActor.assumeIsolated {
@@ -26,6 +34,7 @@ final class HEYCalendarProvider: ObservableObject {
   func stop() {
     timer?.invalidate()
     timer = nil
+    if let selectionObserver { NotificationCenter.default.removeObserver(selectionObserver) }
   }
 
   func refreshIfStale(at date: Date = Date()) {
@@ -43,16 +52,17 @@ final class HEYCalendarProvider: ObservableObject {
     lastRefreshAttempt = date
 
     Task { [weak self] in
-      let outcome = await Task.detached(priority: .utility) {
-        Self.fetchEvents(at: date)
-      }.value
+      let cliEnabled = UserDefaults.standard.object(forKey: SettingsKey.enableHEYCLI)
+        as? Bool ?? true
+      let outcome = cliEnabled
+        ? await Task.detached(priority: .utility) { Self.fetchEvents(at: date) }.value
+        : HEYCalendarFetchOutcome(events: [], isAvailable: true)
       guard let self else { return }
       isRefreshing = false
-      isAvailable = outcome.isAvailable
-      if outcome.isAvailable {
-        cachedEvents = outcome.events
-        updateCurrentEvent(at: Date())
-      }
+      let appleEvents = fetchAppleEvents(at: date)
+      isAvailable = outcome.isAvailable || !appleEvents.isEmpty
+      cachedEvents = Self.deduplicate(outcome.events + appleEvents)
+      updateCurrentEvent(at: Date())
     }
   }
 
@@ -66,6 +76,45 @@ final class HEYCalendarProvider: ObservableObject {
       cachedEvents
       .filter { !$0.allDay && $0.start > date }
       .min { $0.start < $1.start }
+  }
+
+  private func fetchAppleEvents(at date: Date) -> [CalendarEvent] {
+    guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
+    let selectedIDs = UserDefaults.standard.string(forKey: SettingsKey.appleCalendarIDsJSON)
+      .flatMap { $0.data(using: .utf8) }
+      .flatMap { try? JSONDecoder().decode([String].self, from: $0) }
+    let calendars = eventStore.calendars(for: .event).filter {
+      selectedIDs == nil || selectedIDs!.contains($0.calendarIdentifier)
+    }
+    guard !calendars.isEmpty else { return [] }
+    let start = Calendar.current.date(byAdding: .day, value: -1, to: date) ?? date
+    let end = Calendar.current.date(byAdding: .day, value: 8, to: date) ?? date
+    let predicate = eventStore.predicateForEvents(
+      withStart: start, end: end, calendars: calendars)
+    return eventStore.events(matching: predicate)
+      .filter { !$0.isAllDay }
+      .compactMap { event in
+        guard let identifier = event.eventIdentifier else { return nil }
+        return CalendarEvent(
+          id: identifier.hashValue,
+          title: event.title ?? "Untitled event",
+          description: event.notes,
+          start: event.startDate, end: event.endDate,
+          source: event.calendar.title,
+          externalUID: event.calendarItemExternalIdentifier,
+          stableID: "apple:\(identifier)")
+      }
+  }
+
+  private static func deduplicate(_ events: [CalendarEvent]) -> [CalendarEvent] {
+    let normalized = events.map {
+      TimedEvent(
+        id: $0.stableID, source: $0.source, externalUID: $0.externalUID,
+        title: $0.title, detail: $0.description,
+        start: $0.start, end: $0.end, openURL: $0.editURL)
+    }
+    let kept = Set(TimedEvents.deduplicated(normalized).map(\.id))
+    return events.filter { kept.contains($0.stableID) }
   }
 
   nonisolated private static func fetchEvents(at date: Date) -> HEYCalendarFetchOutcome {
@@ -120,6 +169,11 @@ final class HEYCalendarProvider: ObservableObject {
     }
     return paths.first { fileManager.isExecutableFile(atPath: $0) }
   }
+}
+
+extension Notification.Name {
+  static let timescaleCalendarSelectionChanged =
+    Notification.Name("timescaleCalendarSelectionChanged")
 }
 
 private struct HEYCalendarFetchOutcome: Sendable {

@@ -4,7 +4,7 @@
   "title": "Timescale settings",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "timeZone", "day", "routine", "week", "quarter", "solar", "life", "visible", "macOS", "tui"],
+  "required": ["version", "timeZone", "day", "week", "quarter", "solar", "life", "visible", "macOS", "tui"],
   "properties": {
     "version": { "const": 1 },
     "timeZone": { "const": "local" },
@@ -16,21 +16,6 @@
         "start": { "$ref": "#/$defs/time" },
         "end": { "$ref": "#/$defs/time" }
       }
-    },
-    "routine": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "durationMinutes"],
-      "properties": {
-        "name": { "type": "string", "pattern": ".*\\S.*" },
-        "durationMinutes": { "type": "integer", "minimum": 1, "maximum": 10080 },
-        "startedAt": { "type": ["string", "null"], "format": "date-time" }
-      }
-    },
-    "counters": {
-      "type": "array",
-      "maxItems": 100,
-      "items": { "$ref": "#/$defs/counter" }
     },
     "week": {
       "type": "object",
@@ -81,7 +66,7 @@
         "accent": { "enum": ["system", "orange", "blue", "green", "purple", "monochrome"] },
         "precision": { "type": "integer", "minimum": 0, "maximum": 3 },
         "showRemaining": { "type": "boolean" },
-        "statusItemSource": { "type": "string", "pattern": "^(day|week|month|quarter|year|life|counter:.+)$" }
+        "statusItemSource": { "enum": ["day", "week", "month", "quarter", "year", "life"] }
       }
     },
     "tui": {
@@ -112,18 +97,6 @@
     "time": {
       "type": "string",
       "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
-    },
-    "counter": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "name", "targetMinutes", "elapsedSeconds", "startedAt"],
-      "properties": {
-        "id": { "type": "string", "pattern": ".*\\S.*" },
-        "name": { "type": "string", "pattern": ".*\\S.*" },
-        "targetMinutes": { "type": "integer", "minimum": 1, "maximum": 10080 },
-        "elapsedSeconds": { "type": "number", "minimum": 0 },
-        "startedAt": { "type": ["string", "null"], "format": "date-time" }
-      }
     },
     "check": {
       "type": "object",

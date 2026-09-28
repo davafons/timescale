@@ -1,0 +1,581 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0D37292230FAA8AE415EF9B0 /* TimescaleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123DA41325451CCDCDE18383 /* TimescaleStore.swift */; };
+		13DB3EDEF891EB448F27C04F /* TimescaleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 19E7BB360C84180E0CA428C2 /* TimescaleCore */; };
+		2856C5014C43144AFBEA17EA /* ReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCDE463D07DC4A4B9CC9E50B /* ReminderManager.swift */; };
+		28A015E81BB4D4EFD8422784 /* TimescaleWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A8C807D7A93F2230CCCA4B43 /* TimescaleWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		28BDE5B4D7C13C0C37080C9E /* TimescaleIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D45AADFCFC02E29E1DC49AE7 /* TimescaleIntents.swift */; };
+		28DF69F59E12471313786CEB /* TimescaleWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B336518A1005CD0CFBAF1E1A /* TimescaleWidgets.swift */; };
+		3F954D88B9812F3DA54F6862 /* IntentPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60011A6A434A31609E25AC6 /* IntentPeriod.swift */; };
+		59C74B8426FFB63BDC36F9FD /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DE5A5C382475976FDFE0D65 /* DashboardView.swift */; };
+		603DE8413A0EA45D9FF3003B /* HistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC7710D876BFAA79963E9FAF /* HistoryScreen.swift */; };
+		68C6E9862BEDF4E093C2E276 /* TimescaleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 25D9077B5246B8B2C76005E3 /* TimescaleCore */; };
+		6F5546728A7B3F8D76651516 /* ProgressLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4669A8842EB50DA5C7794CDC /* ProgressLiveActivity.swift */; };
+		740EF9A9D010AE1CDFC8C06D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 907181E538D74C478F03A6C2 /* PrivacyInfo.xcprivacy */; };
+		8D7E8765C0BCBFE598AD6B97 /* IOSLocationSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74AEDCC647CA0BD8306F676 /* IOSLocationSource.swift */; };
+		8E04CD37D4A0E67A3E36621F /* CalendarSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A201D02CC812FD9E77D0E5AA /* CalendarSource.swift */; };
+		8E0DDB7F7EEC71B7C6272832 /* ProgressActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6279718BD46859D41D8299C3 /* ProgressActivityManager.swift */; };
+		ACD417A48889C33C4287E7F9 /* ProgressActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D96FF2A7E8B0B1BD6DB25B /* ProgressActivityAttributes.swift */; };
+		AE9D1A1B51CA2E359292FFC9 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 649E417C24AF65100FCCE028 /* SettingsScreen.swift */; };
+		B5F92DCC6B41A3D6BDBD0319 /* IntentPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60011A6A434A31609E25AC6 /* IntentPeriod.swift */; };
+		C43E64994E6C9F75549C27A5 /* ProgressActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D96FF2A7E8B0B1BD6DB25B /* ProgressActivityAttributes.swift */; };
+		C6B6844CAECF7B37079D6CDF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 88EFC4274D62959D9D9B0198 /* Assets.xcassets */; };
+		CE53E831C897E3C7C028B0EF /* TimescaleIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DCDA49BFA953A5D15243B4 /* TimescaleIOSApp.swift */; };
+		DC6B9FA6C13D476072B68E7C /* TimescaleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123DA41325451CCDCDE18383 /* TimescaleStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		031BFD678C465CCA9CEF58A5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BDA390B0E40A71084204B66A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DE752911D83CD27FEEE957D4;
+			remoteInfo = TimescaleWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D88FA784A03955E5495A3577 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				28A015E81BB4D4EFD8422784 /* TimescaleWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		123DA41325451CCDCDE18383 /* TimescaleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimescaleStore.swift; sourceTree = "<group>"; };
+		136076DA63FE04CA2E950981 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1DE5A5C382475976FDFE0D65 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		35DCDA49BFA953A5D15243B4 /* TimescaleIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimescaleIOSApp.swift; sourceTree = "<group>"; };
+		4669A8842EB50DA5C7794CDC /* ProgressLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressLiveActivity.swift; sourceTree = "<group>"; };
+		6279718BD46859D41D8299C3 /* ProgressActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressActivityManager.swift; sourceTree = "<group>"; };
+		649E417C24AF65100FCCE028 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
+		70325AF49BE430959D461285 /* timescale */ = {isa = PBXFileReference; lastKnownFileType = folder; name = timescale; path = .; sourceTree = SOURCE_ROOT; };
+		88EFC4274D62959D9D9B0198 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		907181E538D74C478F03A6C2 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A201D02CC812FD9E77D0E5AA /* CalendarSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSource.swift; sourceTree = "<group>"; };
+		A8C807D7A93F2230CCCA4B43 /* TimescaleWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = TimescaleWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B336518A1005CD0CFBAF1E1A /* TimescaleWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimescaleWidgets.swift; sourceTree = "<group>"; };
+		B7D96FF2A7E8B0B1BD6DB25B /* ProgressActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressActivityAttributes.swift; sourceTree = "<group>"; };
+		CC7710D876BFAA79963E9FAF /* HistoryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryScreen.swift; sourceTree = "<group>"; };
+		D45AADFCFC02E29E1DC49AE7 /* TimescaleIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimescaleIntents.swift; sourceTree = "<group>"; };
+		D74AEDCC647CA0BD8306F676 /* IOSLocationSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSLocationSource.swift; sourceTree = "<group>"; };
+		DCDE463D07DC4A4B9CC9E50B /* ReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderManager.swift; sourceTree = "<group>"; };
+		E60011A6A434A31609E25AC6 /* IntentPeriod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentPeriod.swift; sourceTree = "<group>"; };
+		F02F8A98456BAE011DC3E1CD /* TimescaleIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TimescaleIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A18D745E60E7EC4CDADBD357 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				68C6E9862BEDF4E093C2E276 /* TimescaleCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D7C9A11A4766F1564779D7FD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				13DB3EDEF891EB448F27C04F /* TimescaleCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		469390A317EB2F72E488AF35 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F02F8A98456BAE011DC3E1CD /* TimescaleIOS.app */,
+				A8C807D7A93F2230CCCA4B43 /* TimescaleWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		51C968F57C6452F920D194CF = {
+			isa = PBXGroup;
+			children = (
+				CE02E24F0984E9D97D6A82BC /* App */,
+				C7FACA38BE81683444C1BCC6 /* iOS */,
+				F3E6DEFB801EA85DA04FA40F /* Packages */,
+				F65848687BB2660908657D65 /* Resources */,
+				E48DBFBF7BE9898BF48C99DD /* Shared */,
+				7B41213362A89DAC0C273A8A /* Widgets */,
+				469390A317EB2F72E488AF35 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7B41213362A89DAC0C273A8A /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				136076DA63FE04CA2E950981 /* Info.plist */,
+				4669A8842EB50DA5C7794CDC /* ProgressLiveActivity.swift */,
+				B336518A1005CD0CFBAF1E1A /* TimescaleWidgets.swift */,
+			);
+			name = Widgets;
+			path = iOS/Widgets;
+			sourceTree = "<group>";
+		};
+		C7FACA38BE81683444C1BCC6 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				88EFC4274D62959D9D9B0198 /* Assets.xcassets */,
+			);
+			path = iOS;
+			sourceTree = "<group>";
+		};
+		CE02E24F0984E9D97D6A82BC /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A201D02CC812FD9E77D0E5AA /* CalendarSource.swift */,
+				1DE5A5C382475976FDFE0D65 /* DashboardView.swift */,
+				CC7710D876BFAA79963E9FAF /* HistoryScreen.swift */,
+				D74AEDCC647CA0BD8306F676 /* IOSLocationSource.swift */,
+				6279718BD46859D41D8299C3 /* ProgressActivityManager.swift */,
+				DCDE463D07DC4A4B9CC9E50B /* ReminderManager.swift */,
+				649E417C24AF65100FCCE028 /* SettingsScreen.swift */,
+				D45AADFCFC02E29E1DC49AE7 /* TimescaleIntents.swift */,
+				35DCDA49BFA953A5D15243B4 /* TimescaleIOSApp.swift */,
+			);
+			name = App;
+			path = iOS/App;
+			sourceTree = "<group>";
+		};
+		E48DBFBF7BE9898BF48C99DD /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				E60011A6A434A31609E25AC6 /* IntentPeriod.swift */,
+				B7D96FF2A7E8B0B1BD6DB25B /* ProgressActivityAttributes.swift */,
+				123DA41325451CCDCDE18383 /* TimescaleStore.swift */,
+			);
+			name = Shared;
+			path = iOS/Shared;
+			sourceTree = "<group>";
+		};
+		F3E6DEFB801EA85DA04FA40F /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				70325AF49BE430959D461285 /* timescale */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		F65848687BB2660908657D65 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				907181E538D74C478F03A6C2 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C8BD96D71CC57118DF108ECD /* TimescaleIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0D0547C2287D6677F53947C5 /* Build configuration list for PBXNativeTarget "TimescaleIOS" */;
+			buildPhases = (
+				C23E17C42F12A15010A647BE /* Sources */,
+				CA09653132972FA32B64E3E6 /* Resources */,
+				A18D745E60E7EC4CDADBD357 /* Frameworks */,
+				D88FA784A03955E5495A3577 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				99FA56BD9C8824FD2923C51C /* PBXTargetDependency */,
+			);
+			name = TimescaleIOS;
+			packageProductDependencies = (
+				25D9077B5246B8B2C76005E3 /* TimescaleCore */,
+			);
+			productName = TimescaleIOS;
+			productReference = F02F8A98456BAE011DC3E1CD /* TimescaleIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		DE752911D83CD27FEEE957D4 /* TimescaleWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2FF05EA8CC4562BDD0B6E222 /* Build configuration list for PBXNativeTarget "TimescaleWidgets" */;
+			buildPhases = (
+				7AF23DDCC0451411A2EF6CDF /* Sources */,
+				D7C9A11A4766F1564779D7FD /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TimescaleWidgets;
+			packageProductDependencies = (
+				19E7BB360C84180E0CA428C2 /* TimescaleCore */,
+			);
+			productName = TimescaleWidgets;
+			productReference = A8C807D7A93F2230CCCA4B43 /* TimescaleWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BDA390B0E40A71084204B66A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					C8BD96D71CC57118DF108ECD = {
+						DevelopmentTeam = XXL4Q6P4T4;
+						ProvisioningStyle = Automatic;
+					};
+					DE752911D83CD27FEEE957D4 = {
+						DevelopmentTeam = XXL4Q6P4T4;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 4671FBE561513D53AF200090 /* Build configuration list for PBXProject "Timescale-iOS" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 51C968F57C6452F920D194CF;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FF05B2D2A1703D2376EDF890 /* XCLocalSwiftPackageReference "." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 469390A317EB2F72E488AF35 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C8BD96D71CC57118DF108ECD /* TimescaleIOS */,
+				DE752911D83CD27FEEE957D4 /* TimescaleWidgets */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CA09653132972FA32B64E3E6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C6B6844CAECF7B37079D6CDF /* Assets.xcassets in Resources */,
+				740EF9A9D010AE1CDFC8C06D /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7AF23DDCC0451411A2EF6CDF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3F954D88B9812F3DA54F6862 /* IntentPeriod.swift in Sources */,
+				ACD417A48889C33C4287E7F9 /* ProgressActivityAttributes.swift in Sources */,
+				6F5546728A7B3F8D76651516 /* ProgressLiveActivity.swift in Sources */,
+				DC6B9FA6C13D476072B68E7C /* TimescaleStore.swift in Sources */,
+				28DF69F59E12471313786CEB /* TimescaleWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C23E17C42F12A15010A647BE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8E04CD37D4A0E67A3E36621F /* CalendarSource.swift in Sources */,
+				59C74B8426FFB63BDC36F9FD /* DashboardView.swift in Sources */,
+				603DE8413A0EA45D9FF3003B /* HistoryScreen.swift in Sources */,
+				8D7E8765C0BCBFE598AD6B97 /* IOSLocationSource.swift in Sources */,
+				B5F92DCC6B41A3D6BDBD0319 /* IntentPeriod.swift in Sources */,
+				C43E64994E6C9F75549C27A5 /* ProgressActivityAttributes.swift in Sources */,
+				8E0DDB7F7EEC71B7C6272832 /* ProgressActivityManager.swift in Sources */,
+				2856C5014C43144AFBEA17EA /* ReminderManager.swift in Sources */,
+				AE9D1A1B51CA2E359292FFC9 /* SettingsScreen.swift in Sources */,
+				CE53E831C897E3C7C028B0EF /* TimescaleIOSApp.swift in Sources */,
+				28BDE5B4D7C13C0C37080C9E /* TimescaleIntents.swift in Sources */,
+				0D37292230FAA8AE415EF9B0 /* TimescaleStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		99FA56BD9C8824FD2923C51C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DE752911D83CD27FEEE957D4 /* TimescaleWidgets */;
+			targetProxy = 031BFD678C465CCA9CEF58A5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4641A7C78D8A545DF19CFA20 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = XXL4Q6P4T4;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		AB09BEEAF173BADF88609DF0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iOS/TimescaleIOS.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davafons.timescale.ios;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C45C43F018F0481AB37EF635 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = iOS/TimescaleIOS.entitlements;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iOS/Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davafons.timescale.ios.widgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E46A738C10771A8ABDC7201D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iOS/TimescaleIOS.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davafons.timescale.ios;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E650A3CF3508D62E469F57D5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = iOS/TimescaleIOS.entitlements;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iOS/Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davafons.timescale.ios.widgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F4FED88FDEBE1C4B25340E3A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = XXL4Q6P4T4;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0D0547C2287D6677F53947C5 /* Build configuration list for PBXNativeTarget "TimescaleIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E46A738C10771A8ABDC7201D /* Debug */,
+				AB09BEEAF173BADF88609DF0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2FF05EA8CC4562BDD0B6E222 /* Build configuration list for PBXNativeTarget "TimescaleWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C45C43F018F0481AB37EF635 /* Debug */,
+				E650A3CF3508D62E469F57D5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4671FBE561513D53AF200090 /* Build configuration list for PBXProject "Timescale-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F4FED88FDEBE1C4B25340E3A /* Debug */,
+				4641A7C78D8A545DF19CFA20 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		FF05B2D2A1703D2376EDF890 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		19E7BB360C84180E0CA428C2 /* TimescaleCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TimescaleCore;
+		};
+		25D9077B5246B8B2C76005E3 /* TimescaleCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TimescaleCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = BDA390B0E40A71084204B66A /* Project object */;
+}

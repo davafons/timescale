@@ -181,52 +181,40 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     let requestedSource = defaults.string(forKey: SettingsKey.statusItemSource) ?? "day"
     let now = Date()
     let result: (progress: Double, label: String, resolvedSource: String)
-    if requestedSource.hasPrefix("counter:"),
-      let data = defaults.string(forKey: SettingsKey.countersJSON)?.data(using: .utf8),
-      let counters = try? JSONDecoder().decode([SharedCounter].self, from: data),
-      let counter = counters.first(where: { "counter:\($0.id)" == requestedSource })
-    {
+    switch requestedSource {
+    case "day":
+      result = (dayProgress(at: now, defaults: defaults), "waking day", "day")
+    case "week":
+      var calendar = Calendar.autoupdatingCurrent
+      let weekStart = defaults.string(forKey: SettingsKey.weekStartsOn)
+      calendar.firstWeekday = weekStart == WeekStartChoice.sunday.rawValue ? 1 : 2
+      calendar.minimumDaysInFirstWeek = weekStart == WeekStartChoice.sunday.rawValue ? 1 : 4
+      result = (ProgressCalculator.week(at: now, calendar: calendar).elapsed, "week", "week")
+    case "month":
+      result = (ProgressCalculator.month(at: now).elapsed, "month", "month")
+    case "quarter":
+      let quarterCycle = defaults.string(forKey: SettingsKey.quarterCycle) ?? ""
+      let cycle = QuarterCycle(rawValue: quarterCycle) ?? .calendar
       result = (
-        counter.elapsed(at: now) / Double(counter.targetMinutes * 60),
-        counter.name,
-        requestedSource
+        ProgressCalculator.quarter(at: now, startMonth: cycle.startMonth).elapsed,
+        cycle == .calendar ? "quarter" : "fiscal quarter",
+        "quarter"
       )
-    } else {
-      switch requestedSource {
-      case "day":
-        result = (dayProgress(at: now, defaults: defaults), "waking day", "day")
-      case "week":
-        var calendar = Calendar.autoupdatingCurrent
-        let weekStart = defaults.string(forKey: SettingsKey.weekStartsOn)
-        calendar.firstWeekday = weekStart == WeekStartChoice.sunday.rawValue ? 1 : 2
-        calendar.minimumDaysInFirstWeek = weekStart == WeekStartChoice.sunday.rawValue ? 1 : 4
-        result = (ProgressCalculator.week(at: now, calendar: calendar).elapsed, "week", "week")
-      case "month":
-        result = (ProgressCalculator.month(at: now).elapsed, "month", "month")
-      case "quarter":
-        let quarterCycle = defaults.string(forKey: SettingsKey.quarterCycle) ?? ""
-        let cycle = QuarterCycle(rawValue: quarterCycle) ?? .calendar
-        result = (
-          ProgressCalculator.quarter(at: now, startMonth: cycle.startMonth).elapsed,
-          cycle == .calendar ? "quarter" : "fiscal quarter",
-          "quarter"
-        )
-      case "year":
-        result = (ProgressCalculator.year(at: now).elapsed, "year", "year")
-      case "life":
-        if let birthDate = configuredBirthDate(from: defaults),
-          let progress = ProgressCalculator.life(
-            at: now,
-            birthDate: birthDate,
-            expectedYears: defaults.double(forKey: SettingsKey.lifeExpectancy))
-        {
-          result = (progress.elapsed, "life estimate", "life")
-        } else {
-          result = (dayProgress(at: now, defaults: defaults), "waking day", "day")
-        }
-      default:
+    case "year":
+      result = (ProgressCalculator.year(at: now).elapsed, "year", "year")
+    case "life":
+      if let birthDate = configuredBirthDate(from: defaults),
+        let progress = ProgressCalculator.life(
+          at: now,
+          birthDate: birthDate,
+          expectedYears: defaults.double(forKey: SettingsKey.lifeExpectancy))
+      {
+        result = (progress.elapsed, "life estimate", "life")
+      } else {
         result = (dayProgress(at: now, defaults: defaults), "waking day", "day")
       }
+    default:
+      result = (dayProgress(at: now, defaults: defaults), "waking day", "day")
     }
     if result.resolvedSource != requestedSource {
       defaults.set(result.resolvedSource, forKey: SettingsKey.statusItemSource)
@@ -367,10 +355,6 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
       SettingsKey.accent: AccentChoice.system.rawValue,
       SettingsKey.dayStartMinutes: 8 * 60,
       SettingsKey.dayEndMinutes: 23 * 60,
-      SettingsKey.routineName: "Work",
-      SettingsKey.routineDurationMinutes: 8 * 60,
-      SettingsKey.routineStartedTimestamp: 0.0,
-      SettingsKey.countersJSON: "[]",
       SettingsKey.statusItemSource: "day",
       SettingsKey.lastInteractionTimestamp: 0.0,
       SettingsKey.interactionHistoryJSON: "[]",
@@ -384,29 +368,31 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
 
   private func migrateLegacySettings() {
     let defaults = UserDefaults.standard
+    for key in ["routineName", "routineDurationMinutes", "routineStartedTimestamp", "countersJSON"]
+    {
+      defaults.removeObject(forKey: key)
+    }
+    if defaults.string(forKey: SettingsKey.statusItemSource)?.hasPrefix("counter:") == true {
+      defaults.set("day", forKey: SettingsKey.statusItemSource)
+    }
+    if let data = defaults.string(forKey: SettingsKey.collapsedProgressSourcesJSON)?.data(
+      using: .utf8),
+      let sources = try? JSONDecoder().decode([String].self, from: data)
+    {
+      let retained = sources.filter { !$0.hasPrefix("counter:") }
+      if retained.count != sources.count,
+        let data = try? JSONEncoder().encode(retained),
+        let value = String(data: data, encoding: .utf8)
+      {
+        defaults.set(value, forKey: SettingsKey.collapsedProgressSourcesJSON)
+      }
+    }
     let history = InteractionHistory.timestamps(
       from: defaults.string(forKey: SettingsKey.interactionHistoryJSON) ?? "[]")
     if history.isEmpty {
       let legacyTimestamp = defaults.double(forKey: SettingsKey.lastInteractionTimestamp)
       if legacyTimestamp > 0 {
         InteractionHistory.record(legacyTimestamp, source: "day", in: defaults)
-      }
-    }
-    let hasPersistedCounters =
-      defaults.persistentDomain(forName: "com.davafons.timescale")?[SettingsKey.countersJSON] != nil
-    if !hasPersistedCounters {
-      let started = defaults.double(forKey: SettingsKey.routineStartedTimestamp)
-      let counter = SharedCounter(
-        name: defaults.string(forKey: SettingsKey.routineName) ?? "Work",
-        targetMinutes: min(
-          max(defaults.integer(forKey: SettingsKey.routineDurationMinutes), 1), 10_080),
-        startedAt: started > 0
-          ? ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: started)) : nil
-      )
-      if let data = try? JSONEncoder().encode([counter]),
-        let value = String(data: data, encoding: .utf8)
-      {
-        defaults.set(value, forKey: SettingsKey.countersJSON)
       }
     }
     if defaults.bool(forKey: SettingsKey.birthDateConfigured),
