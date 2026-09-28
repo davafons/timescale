@@ -32,6 +32,7 @@ struct WidgetEntry: TimelineEntry {
   let period: SharedPeriod?
   var events: [TimedEvent] = IOSStore.loadEvents().events
   var eventsUpdated: Date? = IOSStore.loadEvents().updated
+  var calendarAccessDenied: Bool = IOSStore.calendarAccessDenied
   var checks: [InteractionHistory.Check] = IOSStore.loadChecks()
 
   var snapshot: PeriodSnapshot? {
@@ -44,6 +45,7 @@ private enum WidgetEntries {
     let now = Date.now
     let horizon = now.addingTimeInterval(2 * 60 * 60)
     let cached = IOSStore.loadEvents()
+    let calendarAccessDenied = IOSStore.calendarAccessDenied
     let checks = IOSStore.loadChecks()
     let regular = (0...8).map { now.addingTimeInterval(Double($0 * 15 * 60)) }
     let periods = period.map { [$0] } ?? settings.visible
@@ -59,7 +61,8 @@ private enum WidgetEntries {
     let entries = dates.map {
       WidgetEntry(
         date: $0, settings: settings, period: period,
-        events: cached.events, eventsUpdated: cached.updated, checks: checks)
+        events: cached.events, eventsUpdated: cached.updated,
+        calendarAccessDenied: calendarAccessDenied, checks: checks)
     }
     return Timeline(entries: entries, policy: .after(horizon))
   }
@@ -404,7 +407,10 @@ private struct SpecialWidgetView: View {
 
   @ViewBuilder private var calendar: some View {
     let selected = TimedEvents.select(entry.events, at: entry.date)
-    if let updated = entry.eventsUpdated,
+    if entry.calendarAccessDenied {
+      Text("Calendar").font(.headline)
+      Text("Allow Calendar access in Settings").font(.caption)
+    } else if let updated = entry.eventsUpdated,
       entry.date.timeIntervalSince(updated) > 60 * 60
     {
       Text("Calendar").font(.headline)

@@ -29,9 +29,8 @@ import WidgetKit
   func requestAccess() async {
     do {
       let granted = try await store.requestFullAccessToEvents()
-      if granted {
-        refresh(selectedIDs: IOSStore.loadSettings().selectedCalendarIDs)
-      } else {
+      refresh(selectedIDs: IOSStore.loadSettings().selectedCalendarIDs)
+      if !granted {
         errorMessage = "Calendar access was denied. Enable full access in Settings to show events."
       }
     } catch {
@@ -41,6 +40,8 @@ import WidgetKit
 
   func refresh(selectedIDs: [String]?) {
     guard accessGranted else {
+      let status = EKEventStore.authorizationStatus(for: .event)
+      IOSStore.setCalendarAccessDenied(status == .denied || status == .restricted)
       calendars = []
       events = []
       updatedAt = nil
@@ -51,6 +52,7 @@ import WidgetKit
       }
       return
     }
+    IOSStore.setCalendarAccessDenied(false)
     calendars = store.calendars(for: .event).sorted {
       $0.title.localizedStandardCompare($1.title) == .orderedAscending
     }

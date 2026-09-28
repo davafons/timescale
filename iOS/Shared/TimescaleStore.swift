@@ -7,6 +7,7 @@ enum IOSStore {
   static let checksKey = "ios.checks.v1"
   static let eventsKey = "ios.events.v1"
   static let eventsUpdatedKey = "ios.events.updated.v1"
+  static let calendarAccessDeniedKey = "ios.calendar.accessDenied.v1"
 
   static var defaults: UserDefaults {
     UserDefaults(suiteName: appGroup)!
@@ -66,6 +67,14 @@ enum IOSStore {
   static func clearEvents() {
     defaults.removeObject(forKey: eventsKey)
     defaults.removeObject(forKey: eventsUpdatedKey)
+  }
+
+  static var calendarAccessDenied: Bool {
+    defaults.bool(forKey: calendarAccessDeniedKey)
+  }
+
+  static func setCalendarAccessDenied(_ denied: Bool) {
+    defaults.set(denied, forKey: calendarAccessDeniedKey)
   }
 }
 
