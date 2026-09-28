@@ -37,6 +37,7 @@ public enum PeriodSnapshotCalculator {
   ) -> PeriodSnapshot? {
     var localCalendar = calendar
     localCalendar.firstWeekday = weekStartsOn == .monday ? 2 : 1
+    localCalendar.minimumDaysInFirstWeek = weekStartsOn == .monday ? 4 : 1
     let progress: TimeProgress
     switch period {
     case .day:

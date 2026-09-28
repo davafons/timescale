@@ -360,9 +360,11 @@ private struct SpecialWidgetView: View {
       if family != .accessoryRectangular {
         ProgressView(value: snapshot.elapsedFraction)
       }
-      if let birthDate = entry.settings.birthDate {
-        let parts = Calendar.current.dateComponents([.month, .day], from: birthDate)
-        Text("Birthday: \(Calendar.current.monthSymbols[(parts.month ?? 1) - 1]) \(parts.day ?? 1)")
+      if let birthDate = entry.settings.birthDate,
+        let birthday = BirthdayCalculator.nextBirthday(
+          after: entry.date, birthDate: birthDate)
+      {
+        Text("Next birthday: \(birthday.formatted(.dateTime.month(.abbreviated).day()))")
           .font(.caption2).foregroundStyle(.secondary)
       } else {
         Text("Add birthday in Settings")

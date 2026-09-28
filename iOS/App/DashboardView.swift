@@ -266,7 +266,8 @@ private struct ProgressRow: View {
         .uniqued()
     case .year:
       guard let birthDate = settings.birthDate,
-        let birthday = Self.birthday(in: snapshot, birthDate: birthDate)
+        let birthday = BirthdayCalculator.birthday(
+          inYearOf: snapshot.start, birthDate: birthDate)
       else { return [] }
       return [ProgressMarker(
         label: "Birthday", symbol: "gift.fill", date: birthday,
@@ -330,19 +331,6 @@ private struct ProgressRow: View {
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     .accessibilityElement(children: .combine)
     .accessibilityLabel("\(snapshot.period.title), \(settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(precision)))), from \(snapshot.start.formatted()), to \(snapshot.end.formatted())")
-  }
-
-  private static func birthday(in snapshot: PeriodSnapshot, birthDate: Date) -> Date? {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = .autoupdatingCurrent
-    let parts = calendar.dateComponents([.month, .day], from: birthDate)
-    guard let month = parts.month, let day = parts.day,
-      let monthStart = calendar.date(from: DateComponents(
-        year: calendar.component(.year, from: snapshot.start), month: month,
-        day: 1, hour: 12)),
-      let days = calendar.range(of: .day, in: .month, for: monthStart)
-    else { return nil }
-    return calendar.date(byAdding: .day, value: min(day, days.count) - 1, to: monthStart)
   }
 }
 

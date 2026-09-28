@@ -32,6 +32,16 @@ struct IOSContractTests {
     #expect(tokyo.component(.month, from: quarter.end) == 7)
   }
 
+  @Test func weekStartRemainsStableAcrossNewYear() {
+    let now = date(2027, 1, 1, 12, calendar: tokyo)
+    let monday = PeriodSnapshotCalculator.snapshot(
+      for: .week, at: now, weekStartsOn: .monday, calendar: tokyo)!
+    let sunday = PeriodSnapshotCalculator.snapshot(
+      for: .week, at: now, weekStartsOn: .sunday, calendar: tokyo)!
+    #expect(monday.start == date(2026, 12, 28, 0, calendar: tokyo))
+    #expect(sunday.start == date(2026, 12, 27, 0, calendar: tokyo))
+  }
+
   @Test func daylightSavingDayUsesRealDuration() {
     var newYork = Calendar(identifier: .gregorian)
     newYork.timeZone = TimeZone(identifier: "America/New_York")!
@@ -45,6 +55,23 @@ struct IOSContractTests {
 
   @Test func lifeRequiresBirthDate() {
     #expect(PeriodSnapshotCalculator.snapshot(for: .life, at: .now) == nil)
+  }
+
+  @Test func leapDayBirthdayUsesLastDayOfFebruary() {
+    let birthDate = date(2000, 2, 29, 12, calendar: tokyo)
+    let zone = tokyo.timeZone
+    let leapYear = date(2024, 1, 1, 12, calendar: tokyo)
+    let ordinaryYear = date(2025, 1, 1, 12, calendar: tokyo)
+    #expect(BirthdayCalculator.birthday(
+      inYearOf: leapYear, birthDate: birthDate, timeZone: zone)
+      == date(2024, 2, 29, 12, calendar: tokyo))
+    #expect(BirthdayCalculator.birthday(
+      inYearOf: ordinaryYear, birthDate: birthDate, timeZone: zone)
+      == date(2025, 2, 28, 12, calendar: tokyo))
+    #expect(BirthdayCalculator.nextBirthday(
+      after: date(2025, 3, 1, 12, calendar: tokyo),
+      birthDate: birthDate, timeZone: zone)
+      == date(2026, 2, 28, 12, calendar: tokyo))
   }
 
   @Test func reminderStartsAfterCheckAndStaysAwake() {

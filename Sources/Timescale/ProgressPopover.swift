@@ -329,24 +329,7 @@ struct ProgressPopover: View {
 
   private func birthday(inYearOf date: Date) -> Date? {
     guard let birthDate = configuredBirthDate() else { return nil }
-
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = .autoupdatingCurrent
-    let birthday = calendar.dateComponents([.month, .day], from: birthDate)
-    guard let month = birthday.month, let requestedDay = birthday.day,
-      let monthStart = calendar.date(
-        from: DateComponents(
-          calendar: calendar,
-          timeZone: calendar.timeZone,
-          year: calendar.component(.year, from: date),
-          month: month,
-          day: 1,
-          hour: 12
-        )),
-      let days = calendar.range(of: .day, in: .month, for: monthStart)
-    else { return nil }
-
-    return calendar.date(byAdding: .day, value: min(requestedDay, days.count) - 1, to: monthStart)
+    return BirthdayCalculator.birthday(inYearOf: date, birthDate: birthDate)
   }
 
   private func configuredBirthDate() -> Date? {
