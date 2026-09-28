@@ -77,6 +77,7 @@ import WidgetKit
           return TimedEvent(
             id: identifier,
             source: event.calendar.title,
+            sourceIdentifier: "eventkit:\(event.calendar.calendarIdentifier)",
             externalUID: event.calendarItemExternalIdentifier,
             title: event.title ?? "Untitled event",
             detail: event.notes,

@@ -96,22 +96,38 @@ struct IOSContractTests {
   @Test func eventSelectionDeduplicatesSources() {
     let now = date(2026, 9, 28, 10, calendar: tokyo)
     let event = TimedEvent(
-      id: "apple-1", source: "Apple Calendar", externalUID: "shared-uid",
+      id: "apple-1", source: "Apple Calendar",
+      sourceIdentifier: "eventkit:work", externalUID: "shared-uid",
       title: "Review", start: now.addingTimeInterval(-60),
       end: now.addingTimeInterval(600))
     let copy = TimedEvent(
-      id: "hey-1", source: "HEY", externalUID: "shared-uid",
+      id: "hey-1", source: "HEY", sourceIdentifier: "hey-cli",
+      externalUID: "shared-uid",
       title: "Review", start: event.start, end: event.end)
     #expect(TimedEvents.deduplicated([event, copy]).count == 1)
     let noUIDCopy = TimedEvent(
-      id: "hey-2", source: "HEY", title: "Review",
+      id: "hey-2", source: "HEY", sourceIdentifier: "hey-cli",
+      title: "Review",
       start: event.start, end: event.end)
     #expect(TimedEvents.deduplicated([event, noUIDCopy]).count == 1)
     let separateEvent = TimedEvent(
-      id: "other", source: "Other", externalUID: "different",
+      id: "other", source: "Other", sourceIdentifier: "eventkit:other",
+      externalUID: "different",
       title: "Review", start: event.start, end: event.end)
     #expect(TimedEvents.deduplicated([event, separateEvent]).count == 2)
+    let anotherCalendar = TimedEvent(
+      id: "apple-2", source: "Personal",
+      sourceIdentifier: "eventkit:personal", title: "Review",
+      start: event.start, end: event.end)
+    #expect(TimedEvents.deduplicated([event, anotherCalendar]).count == 2)
     #expect(TimedEvents.select([event, copy], at: now).current?.title == "Review")
+  }
+
+  @Test func cachedEventWithoutSourceIdentifierStillDecodes() throws {
+    let data = Data(#"{"id":"legacy","source":"Work","title":"Review","start":0,"end":3600}"#.utf8)
+    let event = try JSONDecoder().decode(TimedEvent.self, from: data)
+    #expect(event.sourceIdentifier == nil)
+    #expect(event.title == "Review")
   }
 
   @Test func eventLeadInRespectsWakingDayAndEightHours() {

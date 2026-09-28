@@ -3,6 +3,7 @@ import Foundation
 public struct TimedEvent: Codable, Equatable, Identifiable, Sendable {
   public let id: String
   public let source: String
+  public let sourceIdentifier: String?
   public let externalUID: String?
   public let title: String
   public let detail: String?
@@ -11,11 +12,13 @@ public struct TimedEvent: Codable, Equatable, Identifiable, Sendable {
   public let openURL: URL?
 
   public init(
-    id: String, source: String, externalUID: String? = nil, title: String,
+    id: String, source: String, sourceIdentifier: String? = nil,
+    externalUID: String? = nil, title: String,
     detail: String? = nil, start: Date, end: Date, openURL: URL? = nil
   ) {
     self.id = id
     self.source = source
+    self.sourceIdentifier = sourceIdentifier
     self.externalUID = externalUID
     self.title = title
     self.detail = detail
@@ -69,7 +72,15 @@ public enum TimedEvents {
         if let firstUID = existing.externalUID, let secondUID = event.externalUID {
           return firstUID == secondUID
         }
-        return true
+        if existing.sourceIdentifier == event.sourceIdentifier,
+          existing.id == event.id
+        { return true }
+        let firstIsCLI = existing.sourceIdentifier == "hey-cli"
+        let secondIsCLI = event.sourceIdentifier == "hey-cli"
+        let firstIsEventKit = existing.sourceIdentifier?.hasPrefix("eventkit:") == true
+        let secondIsEventKit = event.sourceIdentifier?.hasPrefix("eventkit:") == true
+        return (firstIsCLI && secondIsEventKit)
+          || (secondIsCLI && firstIsEventKit)
       }
       if !duplicate { kept.append(event) }
     }

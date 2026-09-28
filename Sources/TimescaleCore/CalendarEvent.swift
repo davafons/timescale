@@ -9,6 +9,7 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
   public let end: Date
   public let allDay: Bool
   public let source: String
+  public let sourceIdentifier: String?
   public let externalUID: String?
   public let stableID: String
 
@@ -21,6 +22,7 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
     end: Date,
     allDay: Bool = false,
     source: String = "HEY",
+    sourceIdentifier: String? = nil,
     externalUID: String? = nil,
     stableID: String? = nil
   ) {
@@ -32,6 +34,7 @@ public struct CalendarEvent: Identifiable, Equatable, Sendable {
     self.end = end
     self.allDay = allDay
     self.source = source
+    self.sourceIdentifier = sourceIdentifier
     self.externalUID = externalUID
     self.stableID = stableID ?? "hey:\(id)"
   }

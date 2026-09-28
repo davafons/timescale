@@ -106,6 +106,7 @@ final class HEYCalendarProvider: ObservableObject {
           description: event.notes,
           start: event.startDate, end: event.endDate,
           source: event.calendar.title,
+          sourceIdentifier: "eventkit:\(event.calendar.calendarIdentifier)",
           externalUID: event.calendarItemExternalIdentifier,
           stableID: "apple:\(identifier)")
       }
@@ -114,7 +115,8 @@ final class HEYCalendarProvider: ObservableObject {
   private static func deduplicate(_ events: [CalendarEvent]) -> [CalendarEvent] {
     let normalized = events.map {
       TimedEvent(
-        id: $0.stableID, source: $0.source, externalUID: $0.externalUID,
+        id: $0.stableID, source: $0.source,
+        sourceIdentifier: $0.sourceIdentifier, externalUID: $0.externalUID,
         title: $0.title, detail: $0.description,
         start: $0.start, end: $0.end, openURL: $0.editURL)
     }
@@ -229,7 +231,8 @@ private struct HEYEvent: Decodable {
       editURL: editURL,
       start: startsAt,
       end: endsAt,
-      allDay: allDay ?? false)
+      allDay: allDay ?? false,
+      sourceIdentifier: "hey-cli")
   }
 }
 
