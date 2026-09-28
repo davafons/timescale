@@ -89,8 +89,12 @@ struct SettingsScreen: View {
           Text("Manual coordinates work offline. Automatic location updates while travelling.")
             .font(.footnote).foregroundStyle(.secondary)
           if model.settings.locationMode == "manual" {
-            OptionalCoordinateField(title: "Latitude", value: $model.settings.latitude)
-            OptionalCoordinateField(title: "Longitude", value: $model.settings.longitude)
+            OptionalCoordinateField(
+              title: "Latitude", range: -90...90,
+              value: $model.settings.latitude)
+            OptionalCoordinateField(
+              title: "Longitude", range: -180...180,
+              value: $model.settings.longitude)
           } else if let message = model.locationMessage {
             Text(message).font(.footnote).foregroundStyle(.secondary)
           }
@@ -188,12 +192,34 @@ private struct TimePickerRow: View {
 
 private struct OptionalCoordinateField: View {
   let title: String
+  let range: ClosedRange<Double>
   @Binding var value: Double?
+  @State private var draft = ""
+  @FocusState private var isFocused: Bool
 
   var body: some View {
-    TextField(title, text: Binding(
-      get: { value.map { String($0) } ?? "" },
-      set: { value = Double($0) }))
+    TextField(title, text: $draft)
       .keyboardType(.numbersAndPunctuation)
+      .focused($isFocused)
+      .onAppear { draft = formattedValue }
+      .onChange(of: draft) { _, text in apply(text) }
+      .onChange(of: isFocused) { _, focused in
+        if !focused { draft = formattedValue }
+      }
+  }
+
+  private var formattedValue: String {
+    value.map { String($0) } ?? ""
+  }
+
+  private func apply(_ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      value = nil
+    } else if let coordinate = Double(trimmed),
+      coordinate.isFinite, range.contains(coordinate)
+    {
+      value = coordinate
+    }
   }
 }
