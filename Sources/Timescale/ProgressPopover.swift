@@ -197,6 +197,7 @@ struct ProgressPopover: View {
             Label("Settings", systemImage: "gearshape")
           }
           .buttonStyle(.plain)
+          .foregroundStyle(accent)
 
           Button {
             HistoryWindowController.shared.show()
@@ -204,13 +205,14 @@ struct ProgressPopover: View {
             Label("View history", systemImage: "clock.arrow.circlepath")
           }
           .buttonStyle(.plain)
+          .foregroundStyle(accent)
 
           Spacer()
 
           Button("Quit") { NSApplication.shared.terminate(nil) }
             .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
         }
-        .foregroundStyle(.secondary)
         .font(TypographyScale.action)
       }
       .padding(LayoutScale.xLarge)
@@ -219,6 +221,7 @@ struct ProgressPopover: View {
     .sheet(item: $selectedCalendarEvent) { event in
       CalendarEventDetail(event: event)
     }
+    .tint(accent)
   }
 
   @ViewBuilder

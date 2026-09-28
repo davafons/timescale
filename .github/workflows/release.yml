@@ -90,8 +90,8 @@ jobs:
           codesign --verify --deep --strict build/Timescale.app
           xcrun stapler validate build/Timescale.app
           xcrun stapler validate "dist/Timescale-${GITHUB_REF_NAME#v}-macOS-universal.dmg"
-          lipo build/Timescale.app/Contents/MacOS/Timescale -verify_arch x86_64
-          lipo build/Timescale.app/Contents/MacOS/Timescale -verify_arch arm64
+          lipo -verify_arch x86_64 build/Timescale.app/Contents/MacOS/Timescale
+          lipo -verify_arch arm64 build/Timescale.app/Contents/MacOS/Timescale
           (cd dist && shasum -a 256 -c SHA256SUMS)
           unzip -tq "dist/Timescale-${GITHUB_REF_NAME#v}-macOS-universal.zip"
           xmllint --noout dist/appcast.xml

@@ -8,11 +8,12 @@ final class HistoryWindowController: NSWindowController, NSWindowDelegate {
 
   private init() {
     let hostingController = NSHostingController(
-      rootView: HistoryView().frame(width: 620, height: 680))
+      rootView: HistoryView().frame(minWidth: 520, minHeight: 460))
     let window = NSWindow(contentViewController: hostingController)
     window.title = "Timescale History"
     window.styleMask = [.titled, .closable, .resizable]
-    window.minSize = NSSize(width: 520, height: 480)
+    window.minSize = NSSize(width: 520, height: 460)
+    window.setContentSize(NSSize(width: 620, height: 600))
     window.isReleasedWhenClosed = false
     window.center()
     super.init(window: window)
@@ -25,7 +26,6 @@ final class HistoryWindowController: NSWindowController, NSWindowDelegate {
 
   func show() {
     guard let window else { return }
-    window.center()
     showWindow(nil)
     NSApplication.shared.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)
@@ -34,6 +34,11 @@ final class HistoryWindowController: NSWindowController, NSWindowDelegate {
 
 private struct HistoryView: View {
   @AppStorage(SettingsKey.interactionHistoryJSON) private var interactionHistoryJSON = "[]"
+  @AppStorage(SettingsKey.accent) private var accentRawValue = AccentChoice.system.rawValue
+
+  private var accent: Color {
+    AccentChoice(rawValue: accentRawValue)?.color ?? .accentColor
+  }
 
   private var checks: [InteractionHistory.Check] {
     InteractionHistory.checks(from: interactionHistoryJSON)
@@ -53,6 +58,7 @@ private struct HistoryView: View {
         .padding(LayoutScale.xLarge)
       }
     }
+    .tint(accent)
   }
 
   private func header(dayChecks: [InteractionHistory.Check], at date: Date) -> some View {
@@ -93,7 +99,7 @@ private struct HistoryView: View {
         HStack(alignment: .bottom, spacing: 2) {
           ForEach(Array(counts.enumerated()), id: \.offset) { _, count in
             Capsule()
-              .fill(count == 0 ? Color.secondary.opacity(0.16) : Color.accentColor)
+              .fill(count == 0 ? Color.secondary.opacity(0.16) : accent)
               .frame(
                 height: max(
                   count == 0 ? 2 : 4,

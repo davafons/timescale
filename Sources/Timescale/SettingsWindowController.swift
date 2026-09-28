@@ -7,11 +7,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
   private init() {
     let hostingController = NSHostingController(
-      rootView: SettingsView().frame(width: 500, height: 700))
+      rootView: SettingsView().frame(minWidth: 660, minHeight: 460))
     let window = NSWindow(contentViewController: hostingController)
     window.title = "Timescale Settings"
     window.styleMask = [.titled, .closable, .resizable]
-    window.minSize = NSSize(width: 460, height: 560)
+    window.minSize = NSSize(width: 660, height: 460)
+    window.setContentSize(NSSize(width: 720, height: 480))
     window.isReleasedWhenClosed = false
     window.center()
     super.init(window: window)
@@ -24,7 +25,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
   func show() {
     guard let window else { return }
-    window.center()
     showWindow(nil)
     NSApplication.shared.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)

@@ -18,6 +18,10 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
   private lazy var updaterController = SPUStandardUpdaterController(
     startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
 
+  private var statusSymbolName: String {
+    Bundle.main.bundleIdentifier == "com.davafons.timescale.dev" ? "hammer" : "hourglass"
+  }
+
   static var updater: SPUUpdater { retainedDelegate.updaterController.updater }
 
   static func main() {
@@ -92,7 +96,8 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     statusItem.autosaveName = "TimescaleStatusItem"
 
     guard let button = statusItem.button else { return }
-    button.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "Timescale")
+    button.image = NSImage(
+      systemSymbolName: statusSymbolName, accessibilityDescription: "Timescale")
     button.imagePosition = .imageLeading
     button.target = self
     button.action = #selector(statusItemClicked)
@@ -283,7 +288,7 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     eventDescription: String = "Current event"
   ) -> NSAttributedString {
     let title = NSMutableAttributedString()
-    appendStatusSymbol("hourglass", accessibilityDescription: "Selected progress", to: title)
+    appendStatusSymbol(statusSymbolName, accessibilityDescription: "Selected progress", to: title)
     title.append(NSAttributedString(string: " \(selectedPercentage)"))
     if let eventPercentage {
       title.append(NSAttributedString(string: "  "))
@@ -445,14 +450,14 @@ extension TimescaleApp: @preconcurrency SPUStandardUserDriverDelegate {
   func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
     NSApplication.shared.dockTile.badgeLabel = nil
     statusItem.button?.image = NSImage(
-      systemSymbolName: "hourglass", accessibilityDescription: "Timescale")
+      systemSymbolName: statusSymbolName, accessibilityDescription: "Timescale")
     statusItem.button?.toolTip = nil
   }
 
   func standardUserDriverWillFinishUpdateSession() {
     NSApplication.shared.dockTile.badgeLabel = nil
     statusItem.button?.image = NSImage(
-      systemSymbolName: "hourglass", accessibilityDescription: "Timescale")
+      systemSymbolName: statusSymbolName, accessibilityDescription: "Timescale")
     statusItem.button?.toolTip = nil
     NSApplication.shared.setActivationPolicy(.accessory)
   }

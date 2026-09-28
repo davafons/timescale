@@ -35,6 +35,11 @@ struct SettingsView: View {
   @State private var confirmingHistoryReset = false
   @State private var checksForUpdatesAutomatically = true
   @State private var installsUpdatesAutomatically = false
+  @State private var selectedPage: SettingsPage? = .general
+
+  private var accent: Color {
+    AccentChoice(rawValue: accentRawValue)?.color ?? .accentColor
+  }
 
   private var birthDate: Binding<Date> {
     Binding(
@@ -69,6 +74,54 @@ struct SettingsView: View {
   }
 
   var body: some View {
+    NavigationSplitView {
+      VStack(spacing: 0) {
+        List(SettingsPage.allCases, selection: $selectedPage) { page in
+          Label(page.title, systemImage: page.symbol)
+            .tag(page)
+        }
+        .listStyle(.sidebar)
+
+        Divider()
+        Text(
+          "\(Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "Timescale") \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")"
+        )
+        .font(TypographyScale.detail)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, LayoutScale.large)
+        .padding(.vertical, LayoutScale.small)
+      }
+      .navigationSplitViewColumnWidth(min: 180, ideal: 190, max: 210)
+    } detail: {
+      switch selectedPage ?? .general {
+      case .general: generalPage
+      case .progress: progressPage
+      case .sources: sourcesPage
+      case .activity: activityPage
+      }
+    }
+    .tint(accent)
+    .onAppear {
+      launchAtLogin.refresh()
+      checksForUpdatesAutomatically = TimescaleApp.updater.automaticallyChecksForUpdates
+      installsUpdatesAutomatically = TimescaleApp.updater.automaticallyDownloadsUpdates
+    }
+    .confirmationDialog(
+      "Clear all check history?",
+      isPresented: $confirmingHistoryReset,
+      titleVisibility: .visible
+    ) {
+      Button("Clear History", role: .destructive) {
+        interactionHistoryJSON = "[]"
+        lastInteractionTimestamp = 0
+      }
+    } message: {
+      Text("This cannot be undone.")
+    }
+  }
+
+  private var generalPage: some View {
     Form {
       Section("Startup") {
         Group {
@@ -112,7 +165,13 @@ struct SettingsView: View {
         }
         .settingsRowInset()
       }
+    }
+    .formStyle(.grouped)
+    .buttonStyle(.borderless)
+  }
 
+  private var progressPage: some View {
+    Form {
       Section("Visible progress") {
         Group {
           Toggle("Day", isOn: $showDay)
@@ -150,35 +209,6 @@ struct SettingsView: View {
           )
           .font(TypographyScale.detail)
           .foregroundStyle(.secondary)
-        }
-        .settingsRowInset()
-      }
-
-      Section("Calendar") {
-        MacCalendarSettings()
-          .settingsRowInset()
-      }
-
-      Section("Sun") {
-        Group {
-          Toggle("Show sunrise and sunset", isOn: $showSolarEvents)
-          Button(locationConfigured ? "Update Current Location" : "Use Current Location") {
-            locationProvider.requestLocation { coordinate in
-              latitude = coordinate.latitude
-              longitude = coordinate.longitude
-              locationConfigured = true
-            }
-          }
-          .disabled(locationProvider.isRequesting)
-          if let message = locationProvider.message {
-            Text(message).font(TypographyScale.detail).foregroundStyle(.secondary)
-          } else if locationConfigured {
-            Text(
-              "Location saved locally: \(latitude.formatted(.number.precision(.fractionLength(2))))°, \(longitude.formatted(.number.precision(.fractionLength(2))))°"
-            )
-            .font(TypographyScale.detail)
-            .foregroundStyle(.secondary)
-          }
         }
         .settingsRowInset()
       }
@@ -247,7 +277,48 @@ struct SettingsView: View {
         }
         .settingsRowInset()
       }
+    }
+    .formStyle(.grouped)
+    .buttonStyle(.borderless)
+  }
 
+  private var sourcesPage: some View {
+    Form {
+      Section("Calendar") {
+        MacCalendarSettings()
+          .settingsRowInset()
+      }
+
+      Section("Sun") {
+        Group {
+          Toggle("Show sunrise and sunset", isOn: $showSolarEvents)
+          Button(locationConfigured ? "Update Current Location" : "Use Current Location") {
+            locationProvider.requestLocation { coordinate in
+              latitude = coordinate.latitude
+              longitude = coordinate.longitude
+              locationConfigured = true
+            }
+          }
+          .disabled(locationProvider.isRequesting)
+          if let message = locationProvider.message {
+            Text(message).font(TypographyScale.detail).foregroundStyle(.secondary)
+          } else if locationConfigured {
+            Text(
+              "Location saved locally: \(latitude.formatted(.number.precision(.fractionLength(2))))°, \(longitude.formatted(.number.precision(.fractionLength(2))))°"
+            )
+            .font(TypographyScale.detail)
+            .foregroundStyle(.secondary)
+          }
+        }
+        .settingsRowInset()
+      }
+    }
+    .formStyle(.grouped)
+    .buttonStyle(.borderless)
+  }
+
+  private var activityPage: some View {
+    Form {
       Section("Time awareness") {
         Group {
           Stepper(
@@ -256,39 +327,31 @@ struct SettingsView: View {
             in: 5...480,
             step: 5
           )
+        }
+        .settingsRowInset()
+      }
+
+      Section("Check history") {
+        Group {
           Text(
             "Opening the menu-bar popover or terminal interface counts as a check. The most recent \(InteractionHistory.maximumCount) checks stay local and are shared between both interfaces."
           )
           .font(TypographyScale.detail)
           .foregroundStyle(.secondary)
+          Button("View Check History") {
+            HistoryWindowController.shared.show()
+          }
           Button("Clear Check History", role: .destructive) {
             confirmingHistoryReset = true
           }
+          .foregroundStyle(.red)
           .disabled(InteractionHistory.checks(from: interactionHistoryJSON).isEmpty)
         }
         .settingsRowInset()
       }
-
     }
     .formStyle(.grouped)
-    .padding(.vertical, LayoutScale.small)
-    .onAppear {
-      launchAtLogin.refresh()
-      checksForUpdatesAutomatically = TimescaleApp.updater.automaticallyChecksForUpdates
-      installsUpdatesAutomatically = TimescaleApp.updater.automaticallyDownloadsUpdates
-    }
-    .confirmationDialog(
-      "Clear all check history?",
-      isPresented: $confirmingHistoryReset,
-      titleVisibility: .visible
-    ) {
-      Button("Clear History", role: .destructive) {
-        interactionHistoryJSON = "[]"
-        lastInteractionTimestamp = 0
-      }
-    } message: {
-      Text("This cannot be undone.")
-    }
+    .buttonStyle(.borderless)
   }
 
   @AppStorage(SettingsKey.awarenessThresholdMinutes)
@@ -309,6 +372,33 @@ struct SettingsView: View {
         minutes.wrappedValue = (components.hour ?? 0) * 60 + (components.minute ?? 0)
       }
     )
+  }
+}
+
+private enum SettingsPage: String, CaseIterable, Identifiable {
+  case general
+  case progress
+  case sources
+  case activity
+
+  var id: Self { self }
+
+  var title: String {
+    switch self {
+    case .general: "General"
+    case .progress: "Progress"
+    case .sources: "Sources"
+    case .activity: "Activity"
+    }
+  }
+
+  var symbol: String {
+    switch self {
+    case .general: "gearshape"
+    case .progress: "chart.bar"
+    case .sources: "calendar"
+    case .activity: "clock.arrow.circlepath"
+    }
   }
 }
 
