@@ -61,7 +61,7 @@ struct SettingsScreen: View {
             set: { model.settings.birthDate = $0 ? CivilDate(date: .now) : nil }))
           if model.settings.birthDate != nil {
             DatePicker("Birth date", selection: Binding(
-              get: { model.settings.birthDate?.pickerDate() ?? .now },
+              get: { model.settings.birthDate?.date() ?? .now },
               set: { model.settings.birthDate = CivilDate(date: $0) }),
               in: ...Date.now, displayedComponents: .date)
             TextField("Country", text: $model.settings.country)

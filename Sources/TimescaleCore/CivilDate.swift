@@ -50,11 +50,4 @@ public struct CivilDate: Codable, Equatable, Sendable {
     else { return nil }
     return calendar.startOfDay(for: noon)
   }
-
-  public func pickerDate(timeZone: TimeZone = .autoupdatingCurrent) -> Date? {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = timeZone
-    return calendar.date(from: DateComponents(
-      year: year, month: month, day: day, hour: 12))
-  }
 }
