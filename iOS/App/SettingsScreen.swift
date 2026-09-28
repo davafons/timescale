@@ -165,7 +165,11 @@ private struct TimePickerRow: View {
   var body: some View {
     DatePicker(title, selection: Binding(
       get: {
-        Calendar.current.startOfDay(for: .now).addingTimeInterval(Double(minutes * 60))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .autoupdatingCurrent
+        return calendar.date(from: DateComponents(
+          year: 2001, month: 1, day: 15,
+          hour: minutes / 60, minute: minutes % 60)) ?? .now
       },
       set: {
         let parts = Calendar.current.dateComponents([.hour, .minute], from: $0)

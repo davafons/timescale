@@ -212,6 +212,17 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+      } else {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Calendar").font(.headline)
+          Text(model.settings.selectedCalendarIDs?.isEmpty == true
+            ? "Select a calendar in Settings to show timed events."
+            : "No current or upcoming timed events in the selected calendars.")
+            .font(.subheadline).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
       }
     } else {
       VStack(alignment: .leading, spacing: 8) {
