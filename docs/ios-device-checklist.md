@@ -23,6 +23,7 @@ Use a physical iPhone on iOS 18 or later with a fresh install. Record the device
 - `xcodebuild` simulator Debug build: passed on 2026-09-28.
 - Signed Release archive and App Store Connect upload: passed on 2026-09-28; build 0.1.0 (2.1) reached internal testing.
 - Dashboard screenshot: `artifacts/ios/dashboard.png`.
+- Configured dashboard with sun, birthday, and life context: `artifacts/ios/dashboard-configured.png`.
 - Large text, dark mode, high-contrast simulator screenshot: `artifacts/ios/dashboard-large-dark.png`.
 
 Home and Lock Screen widget captures and the physical-device checks above remain to be recorded.

@@ -7,6 +7,8 @@ final class HEYCalendarProvider: ObservableObject {
   @Published private(set) var currentEvent: CalendarEvent?
   @Published private(set) var nextEvent: CalendarEvent?
   @Published private(set) var isAvailable = true
+  @Published private(set) var cliUnavailable = false
+  @Published private(set) var calendarAccessDenied = false
 
   private static let refreshInterval: TimeInterval = 5 * 60
   private var timer: Timer?
@@ -60,7 +62,10 @@ final class HEYCalendarProvider: ObservableObject {
       guard let self else { return }
       isRefreshing = false
       let appleEvents = fetchAppleEvents(at: date)
-      isAvailable = outcome.isAvailable || !appleEvents.isEmpty
+      cliUnavailable = cliEnabled && !outcome.isAvailable
+      calendarAccessDenied = EKEventStore.authorizationStatus(for: .event) == .denied
+      isAvailable = outcome.isAvailable
+        || EKEventStore.authorizationStatus(for: .event) == .fullAccess
       cachedEvents = Self.deduplicate(outcome.events + appleEvents)
       updateCurrentEvent(at: Date())
     }

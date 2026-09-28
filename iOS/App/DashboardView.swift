@@ -256,15 +256,21 @@ private struct ProgressRow: View {
         SolarCalculator.events(on: $0, latitude: latitude, longitude: longitude)
       }
       return events.flatMap { solar in
-        [ProgressMarker(label: "Sunrise", symbol: "sunrise.fill", date: solar.sunrise),
-          ProgressMarker(label: "Sunset", symbol: "sunset.fill", date: solar.sunset)]
+        [ProgressMarker(
+          label: "Sunrise", symbol: "sunrise.fill", date: solar.sunrise,
+          detail: solar.sunrise.formatted(date: .omitted, time: .shortened)),
+          ProgressMarker(
+            label: "Sunset", symbol: "sunset.fill", date: solar.sunset,
+            detail: solar.sunset.formatted(date: .omitted, time: .shortened))]
       }.filter { snapshot.start <= $0.date && $0.date <= snapshot.end }
         .uniqued()
     case .year:
       guard let birthDate = settings.birthDate,
         let birthday = Self.birthday(in: snapshot, birthDate: birthDate)
       else { return [] }
-      return [ProgressMarker(label: "Birthday", symbol: "gift.fill", date: birthday)]
+      return [ProgressMarker(
+        label: "Birthday", symbol: "gift.fill", date: birthday,
+        detail: birthday.formatted(.dateTime.month(.wide).day()))]
     default:
       return []
     }
@@ -306,7 +312,7 @@ private struct ProgressRow: View {
           .frame(height: 16)
         if !markers.isEmpty {
           ForEach(markers) { marker in
-            Label("\(marker.label) \(marker.date.formatted(date: .omitted, time: .shortened))",
+            Label("\(marker.label) \(marker.detail)",
               systemImage: marker.symbol)
               .font(.caption).foregroundStyle(.secondary)
           }
@@ -344,6 +350,7 @@ private struct ProgressMarker: Identifiable {
   let label: String
   let symbol: String
   let date: Date
+  let detail: String
   var id: String { "\(label)-\(date.timeIntervalSince1970)" }
 }
 
