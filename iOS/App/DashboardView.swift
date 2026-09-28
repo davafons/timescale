@@ -124,7 +124,14 @@ struct DashboardView: View {
         set: { selectedEventID = $0?.id }
       )) { selection in
         if let event = model.calendar.event(for: selection.id) {
-          EventDetailScreen(event: event)
+          NavigationStack {
+            EventDetailScreen(event: event)
+              .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                  Button("Done") { selectedEventID = nil }
+                }
+              }
+          }
         }
       }
       .confirmationDialog(
@@ -153,7 +160,9 @@ struct DashboardView: View {
       } else if ProgressActivityManager.isSupported {
         Menu("Start Tracking") {
           ForEach(SharedPeriod.allCases.filter {
-            model.settings.visible.contains($0) && model.settings.snapshot(for: $0) != nil
+            model.settings.visible.contains($0)
+              && (model.settings.snapshot(for: $0, at: model.now)?.end ?? .distantPast)
+                > model.now
           }, id: \.self) { period in
             Button(period.title) { proposedTrackingPeriod = period }
           }

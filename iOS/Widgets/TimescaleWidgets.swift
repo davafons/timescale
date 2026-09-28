@@ -137,6 +137,9 @@ private struct PeriodWidgetView: View {
         overview
       } else if let snapshot = entry.snapshot {
         periodContent(snapshot)
+          .accessibilityElement(children: .ignore)
+          .accessibilityLabel(
+            "\(snapshot.period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))), as of \(entry.date.formatted(date: .abbreviated, time: .shortened))")
       } else {
         Label("Set up Life in Timescale", systemImage: "heart")
           .font(.caption)
@@ -152,7 +155,7 @@ private struct PeriodWidgetView: View {
     let value = snapshot.displayedFraction.formatted(
       .percent.precision(.fractionLength(entry.settings.precision)))
     if family == .accessoryInline {
-      Text("\(snapshot.period.title) \(value) · \(entry.date, style: .relative)")
+      Text("\(snapshot.period.title) \(value) \(entry.settings.showRemaining ? "left" : "elapsed") · \(entry.date, style: .relative)")
         .font(.caption)
     } else if family == .accessoryCircular {
       if style == .number {
@@ -190,6 +193,8 @@ private struct PeriodWidgetView: View {
             ProgressView(value: snapshot.elapsedFraction).tint(tint)
           }
         }
+        Text(entry.settings.showRemaining ? "remaining" : "elapsed")
+          .font(.caption2).foregroundStyle(.secondary)
         if family != .accessoryRectangular {
           Text("As of \(entry.date.formatted(date: .omitted, time: .shortened))")
             .font(.caption2).foregroundStyle(.secondary)
@@ -206,7 +211,8 @@ private struct PeriodWidgetView: View {
     let periods = SharedPeriod.allCases.filter { entry.settings.visible.contains($0) }
     let limit = family == .systemLarge ? 6 : family == .systemMedium ? 4 : 2
     return VStack(alignment: .leading, spacing: 5) {
-      Text("Timescale").font(.headline)
+      Text(entry.settings.showRemaining ? "Timescale · remaining" : "Timescale · elapsed")
+        .font(.headline)
       ForEach(Array(periods.prefix(limit)), id: \.self) { period in
         if let snapshot = entry.settings.snapshot(for: period, at: entry.date) {
           HStack {
@@ -407,6 +413,17 @@ private struct SpecialWidgetView: View {
           .font(.caption2).foregroundStyle(.secondary)
         if selected.current != nil {
           ProgressView(value: event.progress(at: entry.date))
+        } else if family == .systemLarge {
+          let day = ProgressCalculator.activeDay(
+            at: entry.date, startMinutes: entry.settings.dayStartMinutes,
+            endMinutes: entry.settings.dayEndMinutes)
+          if let leadIn = TimedEvents.leadIn(
+            to: event.start, at: entry.date, wakingDay: day)
+          {
+            ProgressView(value: leadIn.elapsed)
+            Text("Eight-hour lead-in")
+              .font(.caption2).foregroundStyle(.secondary)
+          }
         }
       }
     } else {
@@ -416,6 +433,9 @@ private struct SpecialWidgetView: View {
   }
 
   private var calendarUnavailableText: String {
+    if entry.settings.selectedCalendarIDs?.isEmpty == true {
+      return "Select a calendar in Timescale"
+    }
     guard let updated = entry.eventsUpdated else { return "Connect Calendar in Timescale" }
     if entry.date.timeIntervalSince(updated) > 60 * 60 {
       return "Calendar data may be stale"

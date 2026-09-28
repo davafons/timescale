@@ -2,6 +2,18 @@ import ActivityKit
 import Foundation
 import TimescaleCore
 
+private enum ProgressActivityError: LocalizedError {
+  case unavailable
+  case ended
+
+  var errorDescription: String? {
+    switch self {
+    case .unavailable: "Live Activities are unavailable for this period."
+    case .ended: "This period has ended. Choose an active period."
+    }
+  }
+}
+
 @MainActor
 enum ProgressActivityManager {
   static var isSupported: Bool { ActivityAuthorizationInfo().areActivitiesEnabled }
@@ -13,11 +25,13 @@ enum ProgressActivityManager {
   }
 
   static func start(_ period: SharedPeriod, settings: IOSSettings) async throws {
+    let now = Date.now
     guard isSupported, settings.visible.contains(period),
-      let snapshot = settings.snapshot(for: period)
-    else { return }
+      let snapshot = settings.snapshot(for: period, at: now)
+    else { throw ProgressActivityError.unavailable }
+    guard snapshot.end > now else { throw ProgressActivityError.ended }
     await stop()
-    let sessionEnd = min(snapshot.end, Date.now.addingTimeInterval(8 * 60 * 60))
+    let sessionEnd = min(snapshot.end, now.addingTimeInterval(8 * 60 * 60))
     let state = ProgressActivityAttributes.ContentState(
       start: snapshot.start, end: snapshot.end,
       sessionEnd: sessionEnd, remaining: settings.showRemaining)

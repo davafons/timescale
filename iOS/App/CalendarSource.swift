@@ -61,6 +61,7 @@ import WidgetKit
     if selected.isEmpty {
       events = []
       updatedAt = now
+      errorMessage = nil
       IOSStore.saveEvents([], at: now)
       WidgetCenter.shared.reloadAllTimelines()
       return
