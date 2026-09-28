@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import TimescaleCore
 import WidgetKit
@@ -62,6 +63,15 @@ import WidgetKit
     Task { await ReminderManager.reschedule(settings: settings, checks: checks) }
   }
 
+  func tick() {
+    now = .now
+    if calendar.accessGranted,
+      calendar.updatedAt.map({ now.timeIntervalSince($0) >= 15 * 60 }) ?? true
+    {
+      calendar.refresh(selectedIDs: settings.selectedCalendarIDs)
+    }
+  }
+
   func clearHistory() {
     IOSStore.clearChecks()
     checks = []
@@ -97,12 +107,17 @@ import WidgetKit
 @main struct TimescaleIOSApp: App {
   @Environment(\.scenePhase) private var scenePhase
   @State private var model = AppModel()
+  private let dashboardClock = Timer.publish(
+    every: 30, on: .main, in: .common).autoconnect()
 
   var body: some Scene {
     WindowGroup {
       DashboardView(model: model)
         .onChange(of: scenePhase) { _, phase in
           if phase == .active { model.activate() }
+        }
+        .onReceive(dashboardClock) { _ in
+          if scenePhase == .active { model.tick() }
         }
         .onOpenURL { url in
           guard url.scheme == "timescale" else { return }
