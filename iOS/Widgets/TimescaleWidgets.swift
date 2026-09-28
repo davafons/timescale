@@ -146,7 +146,7 @@ private struct PeriodWidgetView: View {
         periodContent(snapshot)
           .accessibilityElement(children: .ignore)
           .accessibilityLabel(
-            "\(snapshot.period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))), as of \(entry.date.formatted(date: .abbreviated, time: .shortened))")
+            "\(snapshot.period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))), from \(snapshot.start.formatted()), to \(snapshot.end.formatted()), as of \(entry.date.formatted(date: .abbreviated, time: .shortened))")
       } else {
         Label("Set up Life in Timescale", systemImage: "heart")
           .font(.caption)
@@ -329,12 +329,14 @@ private struct SpecialWidgetView: View {
     if let snapshot = entry.settings.snapshot(for: .day, at: entry.date) {
       let solar = solarToday
       if family == .accessoryRectangular {
-        Text("Day \(percent(snapshot))")
+        Text("Day \(percent(snapshot)) \(modeWord)")
+          .accessibilityLabel(progressAccessibility(snapshot))
         Text(nextSolarText(solar))
           .font(.caption2)
       } else {
         Text("Day and sun").font(.headline)
-        Text(percent(snapshot)).font(.title2.monospacedDigit())
+        Text("\(percent(snapshot)) \(modeWord)")
+          .font(.title2.monospacedDigit()).minimumScaleFactor(0.6).lineLimit(1)
           .foregroundStyle(entry.settings.widgetTint)
           .accessibilityLabel(progressAccessibility(snapshot))
         ProgressView(value: snapshot.elapsedFraction)
@@ -372,7 +374,8 @@ private struct SpecialWidgetView: View {
   @ViewBuilder private var yearBirthday: some View {
     if let snapshot = entry.settings.snapshot(for: .year, at: entry.date) {
       Text("Year and birthday").font(.headline)
-      Text(percent(snapshot)).font(.title2.monospacedDigit())
+      Text("\(percent(snapshot)) \(modeWord)")
+        .font(.title2.monospacedDigit()).minimumScaleFactor(0.6).lineLimit(1)
         .foregroundStyle(entry.settings.widgetTint)
         .accessibilityLabel(progressAccessibility(snapshot))
       if family != .accessoryRectangular {
@@ -396,7 +399,8 @@ private struct SpecialWidgetView: View {
       let birthDate = entry.settings.birthDate?.date()
     {
       Text("Life estimate").font(.headline)
-      Text(percent(snapshot)).font(.title2.monospacedDigit())
+      Text("\(percent(snapshot)) \(modeWord)")
+        .font(.title2.monospacedDigit()).minimumScaleFactor(0.6).lineLimit(1)
         .foregroundStyle(entry.settings.widgetTint)
         .accessibilityLabel(progressAccessibility(snapshot))
       if family != .accessoryRectangular {
@@ -502,6 +506,10 @@ private struct SpecialWidgetView: View {
   private func percent(_ snapshot: PeriodSnapshot) -> String {
     snapshot.displayedFraction.formatted(
       .percent.precision(.fractionLength(entry.settings.precision)))
+  }
+
+  private var modeWord: String {
+    entry.settings.showRemaining ? "left" : "elapsed"
   }
 
   private func progressAccessibility(_ snapshot: PeriodSnapshot) -> String {
