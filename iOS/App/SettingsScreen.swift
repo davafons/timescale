@@ -4,6 +4,7 @@ import TimescaleCore
 struct SettingsScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Bindable var model: AppModel
+  @State private var reminderMessage: String?
 
   var body: some View {
     NavigationStack {
@@ -105,8 +106,15 @@ struct SettingsScreen: View {
                 let granted = await ReminderManager.setEnabled(
                   enabled, settings: model.settings, checks: model.checks)
                 model.settings.remindersEnabled = enabled && granted
+                reminderMessage = enabled && !granted
+                  ? "Notifications are unavailable. Allow Timescale notifications in iPhone Settings to use reminders."
+                  : nil
               }
             }))
+          if let reminderMessage {
+            Text(reminderMessage)
+              .font(.footnote).foregroundStyle(.secondary)
+          }
           Text("Reminders begin after your first check-in during waking hours.")
             .font(.footnote).foregroundStyle(.secondary)
         }
