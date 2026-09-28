@@ -116,13 +116,9 @@ private enum VisualStyle { case bar, ring, number, overview }
 
 private enum SpecialStyle { case daySun, yearBirthday, life, calendar, awareness }
 
-private struct PeriodWidgetView: View {
-  let entry: WidgetEntry
-  let style: VisualStyle
-  @Environment(\.widgetFamily) private var family
-
-  private var tint: Color {
-    switch entry.settings.accent {
+private extension IOSSettings {
+  var widgetTint: Color {
+    switch accent {
     case "blue": .blue
     case "green": .green
     case "purple": .purple
@@ -130,6 +126,14 @@ private struct PeriodWidgetView: View {
     default: .orange
     }
   }
+}
+
+private struct PeriodWidgetView: View {
+  let entry: WidgetEntry
+  let style: VisualStyle
+  @Environment(\.widgetFamily) private var family
+
+  private var tint: Color { entry.settings.widgetTint }
 
   var body: some View {
     Group {
@@ -162,6 +166,7 @@ private struct PeriodWidgetView: View {
         VStack(spacing: 0) {
           Text(snapshot.period.title).font(.caption2)
           Text(value).font(.caption.bold()).minimumScaleFactor(0.6)
+            .foregroundStyle(tint)
           Text(entry.date, style: .relative).font(.system(size: 7))
         }
       } else {
@@ -189,6 +194,7 @@ private struct PeriodWidgetView: View {
             .font(style == .number ? .system(size: 36, weight: .light, design: .rounded) : .title2)
             .minimumScaleFactor(0.6)
             .monospacedDigit()
+            .foregroundStyle(style == .number ? tint : Color.primary)
           if style == .bar {
             ProgressView(value: snapshot.elapsedFraction).tint(tint)
           }
@@ -221,6 +227,7 @@ private struct PeriodWidgetView: View {
             Text(snapshot.displayedFraction, format: .percent.precision(
               .fractionLength(entry.settings.precision)))
               .monospacedDigit()
+              .foregroundStyle(tint)
           }
           .font(.caption)
         }
@@ -308,6 +315,7 @@ private struct SpecialWidgetView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .containerBackground(for: .widget) { Color(uiColor: .secondarySystemGroupedBackground) }
+    .tint(entry.settings.widgetTint)
     .widgetURL(URL(string: "timescale://dashboard"))
   }
 
@@ -321,6 +329,7 @@ private struct SpecialWidgetView: View {
       } else {
         Text("Day and sun").font(.headline)
         Text(percent(snapshot)).font(.title2.monospacedDigit())
+          .foregroundStyle(entry.settings.widgetTint)
         ProgressView(value: snapshot.elapsedFraction)
         Text(nextSolarText(solar))
           .font(.caption2).foregroundStyle(.secondary)
@@ -357,6 +366,7 @@ private struct SpecialWidgetView: View {
     if let snapshot = entry.settings.snapshot(for: .year, at: entry.date) {
       Text("Year and birthday").font(.headline)
       Text(percent(snapshot)).font(.title2.monospacedDigit())
+        .foregroundStyle(entry.settings.widgetTint)
       if family != .accessoryRectangular {
         ProgressView(value: snapshot.elapsedFraction)
       }
@@ -379,6 +389,7 @@ private struct SpecialWidgetView: View {
     {
       Text("Life estimate").font(.headline)
       Text(percent(snapshot)).font(.title2.monospacedDigit())
+        .foregroundStyle(entry.settings.widgetTint)
       if family != .accessoryRectangular {
         ProgressView(value: snapshot.elapsedFraction)
       }
