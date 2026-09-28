@@ -40,8 +40,17 @@ import WidgetKit
       await ProgressActivityManager.reconcile(settings: settings, now: now)
       trackingPeriod = ProgressActivityManager.activePeriod
     }
-    if let lastActivation, now.timeIntervalSince(lastActivation) < 3 { return }
+    if let lastActivation, now.timeIntervalSince(lastActivation) < 3 {
+      if source == "widget", let last = checks.last, last.source == "app" {
+        checks[checks.count - 1] = InteractionHistory.Check(
+          timestamp: last.timestamp, source: "widget")
+        IOSStore.saveChecks(checks)
+        WidgetCenter.shared.reloadAllTimelines()
+      }
+      return
+    }
     lastActivation = now
+    checks = IOSStore.loadChecks()
     checks.append(IOSStore.checkIn(source: source, at: now))
     WidgetCenter.shared.reloadAllTimelines()
     Task { await ReminderManager.reschedule(settings: settings, checks: checks) }
@@ -91,7 +100,7 @@ import WidgetKit
         }
         .onOpenURL { url in
           guard url.scheme == "timescale" else { return }
-          model.now = .now
+          model.activate(source: "widget")
         }
     }
   }

@@ -32,14 +32,18 @@ enum IOSStore {
       .suffix(InteractionHistory.maximumCount))
   }
 
+  static func saveChecks(_ checks: [InteractionHistory.Check]) {
+    defaults.set(
+      try? JSONEncoder().encode(Array(checks.suffix(InteractionHistory.maximumCount))),
+      forKey: checksKey)
+  }
+
   @discardableResult
   static func checkIn(source: String, at date: Date = .now) -> InteractionHistory.Check {
     let check = InteractionHistory.Check(timestamp: date.timeIntervalSince1970, source: source)
     var checks = loadChecks()
     checks.append(check)
-    defaults.set(
-      try? JSONEncoder().encode(Array(checks.suffix(InteractionHistory.maximumCount))),
-      forKey: checksKey)
+    saveChecks(checks)
     return check
   }
 
