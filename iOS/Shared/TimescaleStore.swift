@@ -80,7 +80,7 @@ struct IOSSettings: Codable, Equatable {
   var showRemaining = false
   var precision = 1
   var accent = "orange"
-  var birthDate: Date?
+  var birthDate: CivilDate?
   var country = "Japan"
   var expectedYears = 84.0
   var latitude: Double?
@@ -119,7 +119,11 @@ struct IOSSettings: Codable, Equatable {
     precision = min(max(
       try values.decodeIfPresent(Int.self, forKey: .precision) ?? precision, 0), 3)
     accent = try values.decodeIfPresent(String.self, forKey: .accent) ?? accent
-    birthDate = try values.decodeIfPresent(Date.self, forKey: .birthDate)
+    if let civilDate = try? values.decode(CivilDate.self, forKey: .birthDate) {
+      birthDate = civilDate
+    } else if let legacyDate = try? values.decode(Date.self, forKey: .birthDate) {
+      birthDate = CivilDate(date: legacyDate)
+    }
     country = try values.decodeIfPresent(String.self, forKey: .country) ?? country
     expectedYears = min(max(
       try values.decodeIfPresent(Double.self, forKey: .expectedYears) ?? expectedYears, 1), 150)
@@ -147,7 +151,7 @@ struct IOSSettings: Codable, Equatable {
       for: period, at: date,
       dayStartMinutes: dayStartMinutes, dayEndMinutes: dayEndMinutes,
       weekStartsOn: weekStartsOn, quarterCycle: quarterCycle,
-      birthDate: birthDate, expectedYears: expectedYears,
+      birthDate: birthDate?.date(), expectedYears: expectedYears,
       remaining: showRemaining)
   }
 }

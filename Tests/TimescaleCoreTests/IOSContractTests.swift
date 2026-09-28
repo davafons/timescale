@@ -74,6 +74,22 @@ struct IOSContractTests {
       == date(2026, 2, 28, 12, calendar: tokyo))
   }
 
+  @Test func birthCalendarDateStaysTheSameAcrossTimeZones() throws {
+    let dateOnly = CivilDate(year: 2000, month: 2, day: 29)!
+    let losAngeles = TimeZone(identifier: "America/Los_Angeles")!
+    let tokyoDate = dateOnly.date(timeZone: tokyo.timeZone)!
+    let losAngelesDate = dateOnly.date(timeZone: losAngeles)!
+    #expect(tokyoDate != losAngelesDate)
+    #expect(CivilDate(date: tokyoDate, timeZone: tokyo.timeZone) == dateOnly)
+    #expect(CivilDate(date: losAngelesDate, timeZone: losAngeles) == dateOnly)
+    let encoded = try JSONEncoder().encode(dateOnly)
+    #expect(try JSONDecoder().decode(CivilDate.self, from: encoded) == dateOnly)
+    #expect(throws: DecodingError.self) {
+      try JSONDecoder().decode(CivilDate.self,
+        from: Data(#"{"year":2001,"month":2,"day":29}"#.utf8))
+    }
+  }
+
   @Test func reminderStartsAfterCheckAndStaysAwake() {
     let now = date(2026, 9, 28, 10, calendar: tokyo)
     #expect(ReminderPlanner.nextReminder(

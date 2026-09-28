@@ -360,7 +360,7 @@ private struct SpecialWidgetView: View {
       if family != .accessoryRectangular {
         ProgressView(value: snapshot.elapsedFraction)
       }
-      if let birthDate = entry.settings.birthDate,
+      if let birthDate = entry.settings.birthDate?.date(),
         let birthday = BirthdayCalculator.nextBirthday(
           after: entry.date, birthDate: birthDate)
       {
@@ -375,7 +375,7 @@ private struct SpecialWidgetView: View {
 
   @ViewBuilder private var life: some View {
     if let snapshot = entry.settings.snapshot(for: .life, at: entry.date),
-      let birthDate = entry.settings.birthDate
+      let birthDate = entry.settings.birthDate?.date()
     {
       Text("Life estimate").font(.headline)
       Text(percent(snapshot)).font(.title2.monospacedDigit())

@@ -11,3 +11,5 @@ If a later release adds cross-device sync, migrate only after the person opts in
 5. Continue to support the v1 decoder for older local data and provide a clear rollback path before removing it in a later version.
 
 The current release performs no cross-device sync and requires no account.
+
+Birth dates are stored as Gregorian year, month, and day without a time zone. Settings saved by earlier TestFlight builds with an absolute `Date` are decoded into a calendar date in the device's time zone on upgrade. This preserves the displayed date when upgrading in the same time zone; someone who changed time zones before upgrading should check the Birth date setting once.

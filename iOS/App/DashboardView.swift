@@ -276,7 +276,7 @@ private struct ProgressRow: View {
       }.filter { snapshot.start <= $0.date && $0.date <= snapshot.end }
         .uniqued()
     case .year:
-      guard let birthDate = settings.birthDate,
+      guard let birthDate = settings.birthDate?.date(),
         let birthday = BirthdayCalculator.birthday(
           inYearOf: snapshot.start, birthDate: birthDate)
       else { return [] }
@@ -289,7 +289,8 @@ private struct ProgressRow: View {
   }
 
   private var lifeContext: String? {
-    guard snapshot.period == .life, let birthDate = settings.birthDate else { return nil }
+    guard snapshot.period == .life,
+      let birthDate = settings.birthDate?.date() else { return nil }
     let age = max(0, Calendar.current.dateComponents(
       [.year], from: birthDate, to: snapshot.calculatedAt).year ?? 0)
     return "Age \(age) · \(settings.country) population average \(settings.expectedYears.formatted()) years"

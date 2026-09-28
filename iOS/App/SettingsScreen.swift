@@ -58,11 +58,11 @@ struct SettingsScreen: View {
         Section("Life") {
           Toggle("Birth date set", isOn: Binding(
             get: { model.settings.birthDate != nil },
-            set: { model.settings.birthDate = $0 ? .now : nil }))
+            set: { model.settings.birthDate = $0 ? CivilDate(date: .now) : nil }))
           if model.settings.birthDate != nil {
             DatePicker("Birth date", selection: Binding(
-              get: { model.settings.birthDate ?? .now },
-              set: { model.settings.birthDate = $0 }),
+              get: { model.settings.birthDate?.pickerDate() ?? .now },
+              set: { model.settings.birthDate = CivilDate(date: $0) }),
               in: ...Date.now, displayedComponents: .date)
             TextField("Country", text: $model.settings.country)
             Stepper(

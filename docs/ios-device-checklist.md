@@ -19,9 +19,10 @@ Use a physical iPhone on iOS 18 or later with a fresh install. Record the device
 
 ## Build evidence
 
-- `swift test`: 39 Swift tests passed on 2026-09-28, including ten iOS contract tests.
+- `swift test`: 40 Swift tests passed on 2026-09-28, including eleven iOS contract tests.
 - `xcodebuild` simulator Debug build: passed on 2026-09-28.
 - Signed Release archive and App Store Connect upload: passed on 2026-09-28; build 0.1.0 (2.1) reached internal testing.
+- A TestFlight build was installed and opened on an iPhone on 2026-09-28; device version, build number, and first-launch results are being collected.
 - Dashboard screenshot: `artifacts/ios/dashboard.png`.
 - Configured dashboard with sun, birthday, and life context: `artifacts/ios/dashboard-configured.png`.
 - Large text, dark mode, high-contrast simulator screenshot: `artifacts/ios/dashboard-large-dark.png`.
