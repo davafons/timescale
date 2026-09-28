@@ -233,6 +233,9 @@ private struct PeriodWidgetView: View {
               .foregroundStyle(tint)
           }
           .font(.caption)
+          .accessibilityElement(children: .ignore)
+          .accessibilityLabel(
+            "\(period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))), from \(snapshot.start.formatted()), to \(snapshot.end.formatted())")
         }
       }
       if periods.count > limit {
@@ -333,6 +336,7 @@ private struct SpecialWidgetView: View {
         Text("Day and sun").font(.headline)
         Text(percent(snapshot)).font(.title2.monospacedDigit())
           .foregroundStyle(entry.settings.widgetTint)
+          .accessibilityLabel(progressAccessibility(snapshot))
         ProgressView(value: snapshot.elapsedFraction)
         Text(nextSolarText(solar))
           .font(.caption2).foregroundStyle(.secondary)
@@ -370,6 +374,7 @@ private struct SpecialWidgetView: View {
       Text("Year and birthday").font(.headline)
       Text(percent(snapshot)).font(.title2.monospacedDigit())
         .foregroundStyle(entry.settings.widgetTint)
+        .accessibilityLabel(progressAccessibility(snapshot))
       if family != .accessoryRectangular {
         ProgressView(value: snapshot.elapsedFraction)
       }
@@ -393,6 +398,7 @@ private struct SpecialWidgetView: View {
       Text("Life estimate").font(.headline)
       Text(percent(snapshot)).font(.title2.monospacedDigit())
         .foregroundStyle(entry.settings.widgetTint)
+        .accessibilityLabel(progressAccessibility(snapshot))
       if family != .accessoryRectangular {
         ProgressView(value: snapshot.elapsedFraction)
       }
@@ -496,6 +502,10 @@ private struct SpecialWidgetView: View {
   private func percent(_ snapshot: PeriodSnapshot) -> String {
     snapshot.displayedFraction.formatted(
       .percent.precision(.fractionLength(entry.settings.precision)))
+  }
+
+  private func progressAccessibility(_ snapshot: PeriodSnapshot) -> String {
+    "\(snapshot.period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(percent(snapshot)), from \(snapshot.start.formatted()), to \(snapshot.end.formatted())"
   }
 }
 
