@@ -24,6 +24,8 @@ Use a physical iPhone on iOS 18 or later with a fresh install. Record the device
 - Release archive, signed export, and App Store Connect upload: passed on 2026-09-28; build 0.1.0 (15.1) reached internal testing.
 - A TestFlight build was installed and opened on an iPhone on 2026-09-28; device version, build number, and first-launch results are being collected.
 - Fresh iOS 26.5 iPhone 17 Pro simulator install: the dashboard opened without a permission prompt, with Day, Week, and Month visible in the initial viewport. It recorded one app-open check-in; a separate relaunch recorded one more. A direct `simctl openurl` stopped at iOS's first-use confirmation, so the widget-tap check remains pending.
+- On that agent-owned simulator, revoking Calendar access left the dashboard launchable and saved the denied state with no event cache; granting access and relaunching cleared the denied state and created an empty event cache. Event display and subscribed-calendar behavior still need device checks.
+- With Calendar access granted and a selected ID that did not exist, the simulator saved a missing-calendar count of one. The widget now uses that state for its unavailable message; its actual Home/Lock Screen rendering remains to be reviewed.
 - Dashboard screenshot: `artifacts/ios/dashboard.png`.
 - Fresh-install simulator screenshot: `artifacts/ios/dashboard-fresh-install.png`.
 - Configured dashboard with sun, birthday, and life context: `artifacts/ios/dashboard-configured.png`.

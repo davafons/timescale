@@ -33,6 +33,7 @@ struct WidgetEntry: TimelineEntry {
   var events: [TimedEvent] = IOSStore.loadEvents().events
   var eventsUpdated: Date? = IOSStore.loadEvents().updated
   var calendarAccessDenied: Bool = IOSStore.calendarAccessDenied
+  var missingCalendarCount: Int = IOSStore.missingCalendarCount
   var checks: [InteractionHistory.Check] = IOSStore.loadChecks()
 
   var snapshot: PeriodSnapshot? {
@@ -46,6 +47,7 @@ private enum WidgetEntries {
     let horizon = now.addingTimeInterval(2 * 60 * 60)
     let cached = IOSStore.loadEvents()
     let calendarAccessDenied = IOSStore.calendarAccessDenied
+    let missingCalendarCount = IOSStore.missingCalendarCount
     let checks = IOSStore.loadChecks()
     let regular = (0...8).map { now.addingTimeInterval(Double($0 * 15 * 60)) }
     let periods = period.map { [$0] } ?? settings.visible
@@ -62,7 +64,8 @@ private enum WidgetEntries {
       WidgetEntry(
         date: $0, settings: settings, period: period,
         events: cached.events, eventsUpdated: cached.updated,
-        calendarAccessDenied: calendarAccessDenied, checks: checks)
+        calendarAccessDenied: calendarAccessDenied,
+        missingCalendarCount: missingCalendarCount, checks: checks)
     }
     return Timeline(entries: entries, policy: .after(horizon))
   }
@@ -454,6 +457,10 @@ private struct SpecialWidgetView: View {
               .font(.caption2).foregroundStyle(.secondary)
           }
         }
+        if entry.missingCalendarCount > 0 && family == .systemLarge {
+          Text("\(entry.missingCalendarCount) selected calendar\(entry.missingCalendarCount == 1 ? "" : "s") unavailable")
+            .font(.caption2).foregroundStyle(.secondary)
+        }
       }
     } else {
       Text("Calendar").font(.headline)
@@ -464,6 +471,9 @@ private struct SpecialWidgetView: View {
   private var calendarUnavailableText: String {
     if entry.settings.selectedCalendarIDs?.isEmpty == true {
       return "Select a calendar in Timescale"
+    }
+    if entry.missingCalendarCount > 0 {
+      return "A selected calendar is unavailable"
     }
     guard let updated = entry.eventsUpdated else { return "Connect Calendar in Timescale" }
     if entry.date.timeIntervalSince(updated) > 60 * 60 {

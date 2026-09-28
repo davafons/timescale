@@ -8,6 +8,7 @@ enum IOSStore {
   static let eventsKey = "ios.events.v1"
   static let eventsUpdatedKey = "ios.events.updated.v1"
   static let calendarAccessDeniedKey = "ios.calendar.accessDenied.v1"
+  static let missingCalendarCountKey = "ios.calendar.missingCount.v1"
 
   static var defaults: UserDefaults {
     UserDefaults(suiteName: appGroup)!
@@ -75,6 +76,14 @@ enum IOSStore {
 
   static func setCalendarAccessDenied(_ denied: Bool) {
     defaults.set(denied, forKey: calendarAccessDeniedKey)
+  }
+
+  static var missingCalendarCount: Int {
+    defaults.integer(forKey: missingCalendarCountKey)
+  }
+
+  static func setMissingCalendarCount(_ count: Int) {
+    defaults.set(max(0, count), forKey: missingCalendarCountKey)
   }
 }
 

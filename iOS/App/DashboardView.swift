@@ -207,6 +207,10 @@ struct DashboardView: View {
             Text(detail).font(.caption).lineLimit(3)
           }
           Text(event.source).font(.caption2).foregroundStyle(.secondary)
+          if let message = model.calendar.missingSelectedMessage {
+            Text(message)
+              .font(.caption).foregroundStyle(.secondary)
+          }
           Button("Open in Calendar") { selectedEventID = event.id }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -219,6 +223,10 @@ struct DashboardView: View {
             ? "Select a calendar in Settings to show timed events."
             : "No current or upcoming timed events in the selected calendars.")
             .font(.subheadline).foregroundStyle(.secondary)
+          if let message = model.calendar.missingSelectedMessage {
+            Text(message)
+              .font(.caption).foregroundStyle(.secondary)
+          }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()

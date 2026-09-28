@@ -11,6 +11,12 @@ import WidgetKit
   var events: [TimedEvent] = IOSStore.loadEvents().events
   var updatedAt: Date? = IOSStore.loadEvents().updated
   var errorMessage: String?
+  var missingSelectedCount = 0
+
+  var missingSelectedMessage: String? {
+    guard missingSelectedCount > 0 else { return nil }
+    return "\(missingSelectedCount) selected calendar\(missingSelectedCount == 1 ? " is" : "s are") unavailable. Check \(missingSelectedCount == 1 ? "its" : "their") subscription in Apple Calendar."
+  }
 
   var accessGranted: Bool {
     EKEventStore.authorizationStatus(for: .event) == .fullAccess
@@ -42,6 +48,8 @@ import WidgetKit
     guard accessGranted else {
       let status = EKEventStore.authorizationStatus(for: .event)
       IOSStore.setCalendarAccessDenied(status == .denied || status == .restricted)
+      missingSelectedCount = 0
+      IOSStore.setMissingCalendarCount(0)
       calendars = []
       events = []
       updatedAt = nil
@@ -56,6 +64,10 @@ import WidgetKit
     calendars = store.calendars(for: .event).sorted {
       $0.title.localizedStandardCompare($1.title) == .orderedAscending
     }
+    missingSelectedCount = selectedIDs.map {
+      Set($0).subtracting(calendars.map(\.calendarIdentifier)).count
+    } ?? 0
+    IOSStore.setMissingCalendarCount(missingSelectedCount)
     let selected = calendars.filter {
       selectedIDs == nil || selectedIDs!.contains($0.calendarIdentifier)
     }
