@@ -41,6 +41,7 @@ final class MacCalendarSettingsModel: ObservableObject {
   }
 }
 
+@MainActor
 struct MacCalendarSettings: View {
   @StateObject private var model = MacCalendarSettingsModel()
   @AppStorage(SettingsKey.enableHEYCLI) private var enableHEYCLI = true
