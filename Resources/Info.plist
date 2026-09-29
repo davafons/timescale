@@ -18,8 +18,13 @@
             <array><string>timescale</string></array>
         </dict>
     </array>
-    <key>CFBundleShortVersionString</key><string>0.3.2</string>
+    <key>CFBundleShortVersionString</key><string>0.3.3</string>
     <key>CFBundleVersion</key><string>1</string>
+    <key>SUFeedURL</key><string>https://github.com/davafons/timescale/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key><string>19+DNQt8z/fzd/O8OqBmD5vSW/NRCiDGXwzzKTZ0IIE=</string>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SUVerifyUpdateBeforeExtraction</key><true/>
+    <key>SURequireSignedFeed</key><true/>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
     <key>LSUIElement</key><true/>

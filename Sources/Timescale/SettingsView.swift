@@ -33,6 +33,8 @@ struct SettingsView: View {
   @AppStorage(SettingsKey.interactionHistoryJSON) private var interactionHistoryJSON = "[]"
   @AppStorage(SettingsKey.lastInteractionTimestamp) private var lastInteractionTimestamp = 0.0
   @State private var confirmingHistoryReset = false
+  @State private var checksForUpdatesAutomatically = true
+  @State private var installsUpdatesAutomatically = false
 
   private var birthDate: Binding<Date> {
     Binding(
@@ -88,6 +90,24 @@ struct SettingsView: View {
             Text(errorMessage)
               .font(TypographyScale.detail)
               .foregroundStyle(.red)
+          }
+        }
+        .settingsRowInset()
+      }
+
+      Section("Updates") {
+        Group {
+          Toggle("Check for updates automatically", isOn: $checksForUpdatesAutomatically)
+            .onChange(of: checksForUpdatesAutomatically) { _, value in
+              TimescaleApp.updater.automaticallyChecksForUpdates = value
+            }
+          Toggle("Download and install updates automatically", isOn: $installsUpdatesAutomatically)
+            .disabled(!checksForUpdatesAutomatically)
+            .onChange(of: installsUpdatesAutomatically) { _, value in
+              TimescaleApp.updater.automaticallyDownloadsUpdates = value
+            }
+          Button("Check for Updates Now") {
+            TimescaleApp.updater.checkForUpdates()
           }
         }
         .settingsRowInset()
@@ -254,6 +274,8 @@ struct SettingsView: View {
     .padding(.vertical, LayoutScale.small)
     .onAppear {
       launchAtLogin.refresh()
+      checksForUpdatesAutomatically = TimescaleApp.updater.automaticallyChecksForUpdates
+      installsUpdatesAutomatically = TimescaleApp.updater.automaticallyDownloadsUpdates
     }
     .confirmationDialog(
       "Clear all check history?",

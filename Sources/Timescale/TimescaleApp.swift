@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 import TimescaleCore
 
@@ -14,6 +15,10 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
   private var defaultsObserver: NSObjectProtocol?
   private let sharedSettings = SharedSettingsCoordinator()
   private let locationProvider = LocationProvider()
+  private lazy var updaterController = SPUStandardUpdaterController(
+    startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
+
+  static var updater: SPUUpdater { retainedDelegate.updaterController.updater }
 
   static func main() {
     let application = NSApplication.shared
@@ -29,6 +34,7 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     calendarProvider.start()
     configurePopover()
     configureStatusItem()
+    _ = updaterController
     updatePercentage()
 
     updateTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -118,11 +124,16 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     settingsItem.image = NSImage(
       systemSymbolName: "gearshape", accessibilityDescription: "Settings")
 
+    let updateItem = menu.addItem(
+      withTitle: "Check for Updates…",
+      action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+      keyEquivalent: "")
+    updateItem.target = updaterController
+
     menu.addItem(.separator())
     menu.addItem(withTitle: "Quit Timescale", action: #selector(quit), keyEquivalent: "")
-    for item in menu.items {
-      item.target = self
-    }
+    settingsItem.target = self
+    menu.item(withTitle: "Quit Timescale")?.target = self
 
     NSMenu.popUpContextMenu(menu, with: event, for: button)
   }
@@ -413,6 +424,38 @@ final class TimescaleApp: NSObject, NSApplicationDelegate {
     }
   }
 
+}
+
+extension TimescaleApp: @preconcurrency SPUStandardUserDriverDelegate {
+  var supportsGentleScheduledUpdateReminders: Bool { true }
+
+  func standardUserDriverWillHandleShowingUpdate(
+    _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState
+  ) {
+    NSApplication.shared.setActivationPolicy(.regular)
+    if !state.userInitiated {
+      NSApplication.shared.dockTile.badgeLabel = "1"
+      statusItem.button?.image = NSImage(
+        systemSymbolName: "arrow.down.circle.fill",
+        accessibilityDescription: "Timescale update available")
+      statusItem.button?.toolTip = "Timescale update available"
+    }
+  }
+
+  func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+    NSApplication.shared.dockTile.badgeLabel = nil
+    statusItem.button?.image = NSImage(
+      systemSymbolName: "hourglass", accessibilityDescription: "Timescale")
+    statusItem.button?.toolTip = nil
+  }
+
+  func standardUserDriverWillFinishUpdateSession() {
+    NSApplication.shared.dockTile.badgeLabel = nil
+    statusItem.button?.image = NSImage(
+      systemSymbolName: "hourglass", accessibilityDescription: "Timescale")
+    statusItem.button?.toolTip = nil
+    NSApplication.shared.setActivationPolicy(.accessory)
+  }
 }
 
 @MainActor

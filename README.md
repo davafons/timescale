@@ -65,7 +65,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 On Windows, download the `windows-x86_64` release archive, extract `timescale.exe`, and add its directory to `PATH`.
 
-Development builds are ad-hoc signed and macOS may ask you to confirm their first launch. Official binary releases should be Developer ID signed and notarized.
+Development builds are ad-hoc signed and macOS may ask you to confirm their first launch. Official binary releases are Developer ID signed and notarized.
 
 ### From source
 
@@ -190,7 +190,9 @@ CODE_SIGN_IDENTITY='Developer ID Application: Your Name (TEAMID)' make package
 
 To notarize the DMG, save credentials with `xcrun notarytool store-credentials`, then set `NOTARY_PROFILE` while packaging.
 
-GitHub Releases are the distribution channel for published builds. Update `CFBundleShortVersionString` in `Resources/Info.plist` and the Cargo workspace version, then push the matching semantic-version tag. The release workflow creates the universal native app plus TUI archives for universal macOS, Linux x86-64, Linux ARM64, and Windows x86-64, verifies them, and publishes one checksum manifest. Developer ID and notarization secrets are optional; the native app falls back to an ad-hoc signature when absent.
+GitHub Releases are the distribution channel for published builds. The Mac app uses [Sparkle](https://sparkle-project.org/) to check for updates automatically and show update prompts. Right-click the menu bar icon and choose **Check for Updates…** to check manually. Settings has controls for automatic checks and automatic installation. The first Sparkle-enabled release must be installed manually by people using earlier versions.
+
+Update `CFBundleShortVersionString` in `Resources/Info.plist` and the Cargo workspace version, then push the matching semantic-version tag. The release workflow creates the universal native app, its signed Sparkle `appcast.xml`, and TUI archives for universal macOS, Linux x86-64, Linux ARM64, and Windows x86-64. It verifies them and publishes one checksum manifest. Mac releases require Developer ID signing, notarization, and the `SPARKLE_PRIVATE_KEY` repository secret. The matching private key is backed up locally at `~/.config/timescale/sparkle-private-key.txt`; keep it safe because installed apps trust its public key. The appcast is attached to each GitHub Release and served through the stable `releases/latest/download/appcast.xml` URL.
 
 ## Design principles
 

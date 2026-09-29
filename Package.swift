@@ -9,9 +9,12 @@ let package = Package(
     .library(name: "TimescaleCore", targets: ["TimescaleCore"]),
     .executable(name: "Timescale", targets: ["Timescale"]),
   ],
+  dependencies: [
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.6")
+  ],
   targets: [
     .target(name: "TimescaleCore"),
-    .executableTarget(name: "Timescale", dependencies: ["TimescaleCore"]),
+    .executableTarget(name: "Timescale", dependencies: ["TimescaleCore", "Sparkle"]),
     .testTarget(name: "TimescaleCoreTests", dependencies: ["TimescaleCore"]),
   ]
 )

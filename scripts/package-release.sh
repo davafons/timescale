@@ -46,6 +46,15 @@ elif [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_
     xcrun stapler staple "$dist_dir/$artifact_name.dmg"
 fi
 
+if [ -n "${NOTARY_PROFILE:-}" ] || {
+    [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]
+}; then
+    xcrun stapler staple "$project_dir/build/Timescale.app"
+    ditto -c -k --sequesterRsrc --keepParent \
+        "$project_dir/build/Timescale.app" \
+        "$dist_dir/$artifact_name.zip"
+fi
+
 (
     cd "$dist_dir"
     shasum -a 256 "$artifact_name.zip" "$artifact_name.dmg" > SHA256SUMS

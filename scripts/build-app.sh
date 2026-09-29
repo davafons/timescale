@@ -11,7 +11,7 @@ code_sign_identity=${CODE_SIGN_IDENTITY:--}
 cd "$project_dir"
 
 rm -rf "$app_dir"
-mkdir -p "$contents_dir/MacOS" "$contents_dir/Resources"
+mkdir -p "$contents_dir/MacOS" "$contents_dir/Resources" "$contents_dir/Frameworks"
 
 if [ "${TIMESCALE_UNIVERSAL:-0}" = "1" ]; then
     arm_scratch="$project_dir/.build/universal-arm64"
@@ -19,13 +19,18 @@ if [ "${TIMESCALE_UNIVERSAL:-0}" = "1" ]; then
     swift build -c release --triple arm64-apple-macosx14.0 --scratch-path "$arm_scratch"
     swift build -c release --triple x86_64-apple-macosx14.0 --scratch-path "$intel_scratch"
     lipo -create \
-        "$arm_scratch/arm64-apple-macosx/release/Timescale" \
-        "$intel_scratch/x86_64-apple-macosx/release/Timescale" \
+        "$arm_scratch/release/Timescale" \
+        "$intel_scratch/release/Timescale" \
         -output "$contents_dir/MacOS/Timescale"
+    sparkle_framework="$arm_scratch/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 else
     swift build -c release
     cp "$project_dir/.build/release/Timescale" "$contents_dir/MacOS/Timescale"
+    sparkle_framework="$project_dir/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 fi
+
+ditto "$sparkle_framework" "$contents_dir/Frameworks/Sparkle.framework"
+install_name_tool -add_rpath @executable_path/../Frameworks "$contents_dir/MacOS/Timescale"
 
 cp "$project_dir/Resources/Info.plist" "$contents_dir/Info.plist"
 cp "$project_dir/Resources/AppIcon.icns" "$contents_dir/Resources/AppIcon.icns"
@@ -37,7 +42,17 @@ cp "$project_dir/Resources/PrivacyInfo.xcprivacy" "$contents_dir/Resources/Priva
 if [ "$code_sign_identity" = "-" ]; then
     codesign --force --deep --sign - "$app_dir"
 else
-    codesign --force --deep --options runtime --timestamp --sign "$code_sign_identity" "$app_dir"
+    sparkle_bundle="$contents_dir/Frameworks/Sparkle.framework"
+    codesign --force --options runtime --timestamp --sign "$code_sign_identity" \
+        "$sparkle_bundle/Versions/B/XPCServices/Installer.xpc"
+    codesign --force --options runtime --timestamp --preserve-metadata=entitlements \
+        --sign "$code_sign_identity" "$sparkle_bundle/Versions/B/XPCServices/Downloader.xpc"
+    codesign --force --options runtime --timestamp --sign "$code_sign_identity" \
+        "$sparkle_bundle/Versions/B/Autoupdate"
+    codesign --force --options runtime --timestamp --sign "$code_sign_identity" \
+        "$sparkle_bundle/Versions/B/Updater.app"
+    codesign --force --options runtime --timestamp --sign "$code_sign_identity" "$sparkle_bundle"
+    codesign --force --options runtime --timestamp --sign "$code_sign_identity" "$app_dir"
 fi
 
 echo "$app_dir"
