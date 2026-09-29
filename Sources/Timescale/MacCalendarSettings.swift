@@ -26,16 +26,17 @@ final class MacCalendarSettingsModel: ObservableObject {
   }
 
   func request() {
-    Task {
-      do {
-        if try await store.requestFullAccessToEvents() {
-          refresh()
+    store.requestFullAccessToEvents { [weak self] granted, error in
+      Task { @MainActor in
+        guard let self else { return }
+        if granted {
+          self.refresh()
           NotificationCenter.default.post(name: .timescaleCalendarSelectionChanged, object: nil)
+        } else if let error {
+          self.message = error.localizedDescription
         } else {
-          message = "Calendar access was denied. Enable full access in System Settings."
+          self.message = "Calendar access was denied. Enable full access in System Settings."
         }
-      } catch {
-        message = error.localizedDescription
       }
     }
   }
