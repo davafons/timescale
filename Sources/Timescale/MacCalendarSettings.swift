@@ -52,34 +52,41 @@ struct MacCalendarSettings: View {
         .onChange(of: enableHEYCLI) { _, _ in notify() }
       if model.authorized {
         ForEach(model.calendars, id: \.calendarIdentifier) { calendar in
-          Toggle(calendar.title, isOn: Binding(
-            get: { selectedIDs?.contains(calendar.calendarIdentifier) ?? true },
-            set: { enabled in
-              var ids = selectedIDs ?? model.calendars.map(\.calendarIdentifier)
-              if enabled {
-                if !ids.contains(calendar.calendarIdentifier) {
-                  ids.append(calendar.calendarIdentifier)
+          Toggle(
+            calendar.title,
+            isOn: Binding(
+              get: { selectedIDs?.contains(calendar.calendarIdentifier) ?? true },
+              set: { enabled in
+                var ids = selectedIDs ?? model.calendars.map(\.calendarIdentifier)
+                if enabled {
+                  if !ids.contains(calendar.calendarIdentifier) {
+                    ids.append(calendar.calendarIdentifier)
+                  }
+                } else {
+                  ids.removeAll { $0 == calendar.calendarIdentifier }
                 }
-              } else {
-                ids.removeAll { $0 == calendar.calendarIdentifier }
-              }
-              selectedIDsJSON = String(
-                data: (try? JSONEncoder().encode(ids)) ?? Data("[]".utf8),
-                encoding: .utf8) ?? "[]"
-              notify()
-            }))
+                selectedIDsJSON =
+                  String(
+                    data: (try? JSONEncoder().encode(ids)) ?? Data("[]".utf8),
+                    encoding: .utf8) ?? "[]"
+                notify()
+              }))
         }
         if missingCalendarCount > 0 {
-          Text("\(missingCalendarCount) selected calendar\(missingCalendarCount == 1 ? " is" : "s are") unavailable. Check its subscription in Apple Calendar.")
-            .font(TypographyScale.detail)
-            .foregroundStyle(.secondary)
+          Text(
+            "\(missingCalendarCount) selected calendar\(missingCalendarCount == 1 ? " is" : "s are") unavailable. Check its subscription in Apple Calendar."
+          )
+          .font(TypographyScale.detail)
+          .foregroundStyle(.secondary)
         }
       } else {
         Button("Connect Apple Calendar") { model.request() }
       }
-      Text("Subscribed HEY calendars appear after you add their read-only feed in Apple Calendar. Subscription refresh may lag.")
-        .font(TypographyScale.detail)
-        .foregroundStyle(.secondary)
+      Text(
+        "Subscribed HEY calendars appear after you add their read-only feed in Apple Calendar. Subscription refresh may lag."
+      )
+      .font(TypographyScale.detail)
+      .foregroundStyle(.secondary)
       if let message = model.message {
         Text(message).font(TypographyScale.detail).foregroundStyle(.secondary)
       }

@@ -13,8 +13,9 @@ struct IOSContractTests {
     _ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0,
     calendar: Calendar
   ) -> Date {
-    calendar.date(from: DateComponents(
-      year: year, month: month, day: day, hour: hour, minute: minute))!
+    calendar.date(
+      from: DateComponents(
+        year: year, month: month, day: day, hour: hour, minute: minute))!
   }
 
   @Test func overnightAndFiscalQuarter() {
@@ -62,16 +63,19 @@ struct IOSContractTests {
     let zone = tokyo.timeZone
     let leapYear = date(2024, 1, 1, 12, calendar: tokyo)
     let ordinaryYear = date(2025, 1, 1, 12, calendar: tokyo)
-    #expect(BirthdayCalculator.birthday(
-      inYearOf: leapYear, birthDate: birthDate, timeZone: zone)
-      == date(2024, 2, 29, 12, calendar: tokyo))
-    #expect(BirthdayCalculator.birthday(
-      inYearOf: ordinaryYear, birthDate: birthDate, timeZone: zone)
-      == date(2025, 2, 28, 12, calendar: tokyo))
-    #expect(BirthdayCalculator.nextBirthday(
-      after: date(2025, 3, 1, 12, calendar: tokyo),
-      birthDate: birthDate, timeZone: zone)
-      == date(2026, 2, 28, 12, calendar: tokyo))
+    #expect(
+      BirthdayCalculator.birthday(
+        inYearOf: leapYear, birthDate: birthDate, timeZone: zone)
+        == date(2024, 2, 29, 12, calendar: tokyo))
+    #expect(
+      BirthdayCalculator.birthday(
+        inYearOf: ordinaryYear, birthDate: birthDate, timeZone: zone)
+        == date(2025, 2, 28, 12, calendar: tokyo))
+    #expect(
+      BirthdayCalculator.nextBirthday(
+        after: date(2025, 3, 1, 12, calendar: tokyo),
+        birthDate: birthDate, timeZone: zone)
+        == date(2026, 2, 28, 12, calendar: tokyo))
   }
 
   @Test func birthCalendarDateStaysTheSameAcrossTimeZones() throws {
@@ -85,17 +89,19 @@ struct IOSContractTests {
     let encoded = try JSONEncoder().encode(dateOnly)
     #expect(try JSONDecoder().decode(CivilDate.self, from: encoded) == dateOnly)
     #expect(throws: DecodingError.self) {
-      try JSONDecoder().decode(CivilDate.self,
+      try JSONDecoder().decode(
+        CivilDate.self,
         from: Data(#"{"year":2001,"month":2,"day":29}"#.utf8))
     }
   }
 
   @Test func reminderStartsAfterCheckAndStaysAwake() {
     let now = date(2026, 9, 28, 10, calendar: tokyo)
-    #expect(ReminderPlanner.nextReminder(
-      after: [], now: now, thresholdMinutes: 90,
-      dayStartMinutes: 8 * 60, dayEndMinutes: 23 * 60,
-      calendar: tokyo) == nil)
+    #expect(
+      ReminderPlanner.nextReminder(
+        after: [], now: now, thresholdMinutes: 90,
+        dayStartMinutes: 8 * 60, dayEndMinutes: 23 * 60,
+        calendar: tokyo) == nil)
     let check = InteractionHistory.Check(
       timestamp: date(2026, 9, 28, 9, 30, calendar: tokyo).timeIntervalSince1970,
       source: "app")
@@ -108,10 +114,11 @@ struct IOSContractTests {
     let lateCheck = InteractionHistory.Check(
       timestamp: date(2026, 9, 28, 22, calendar: tokyo).timeIntervalSince1970,
       source: "app")
-    #expect(ReminderPlanner.nextReminder(
-      after: [lateCheck], now: date(2026, 9, 28, 22, 10, calendar: tokyo),
-      thresholdMinutes: 90, dayStartMinutes: 8 * 60, dayEndMinutes: 23 * 60,
-      calendar: tokyo) == nil)
+    #expect(
+      ReminderPlanner.nextReminder(
+        after: [lateCheck], now: date(2026, 9, 28, 22, 10, calendar: tokyo),
+        thresholdMinutes: 90, dayStartMinutes: 8 * 60, dayEndMinutes: 23 * 60,
+        calendar: tokyo) == nil)
   }
 
   @Test func reminderOncePerOvernightGap() {
@@ -119,21 +126,24 @@ struct IOSContractTests {
       timestamp: date(2026, 9, 28, 23, 30, calendar: tokyo).timeIntervalSince1970,
       source: "app")
     let waiting = date(2026, 9, 29, 0, 45, calendar: tokyo)
-    #expect(ReminderPlanner.nextReminder(
-      after: [check], now: waiting, thresholdMinutes: 90,
-      dayStartMinutes: 22 * 60, dayEndMinutes: 6 * 60,
-      calendar: tokyo) == date(2026, 9, 29, 1, calendar: tokyo))
-    #expect(ReminderPlanner.nextReminder(
-      after: [check], now: date(2026, 9, 29, 1, 1, calendar: tokyo),
-      thresholdMinutes: 90, dayStartMinutes: 22 * 60,
-      dayEndMinutes: 6 * 60, calendar: tokyo) == nil)
+    #expect(
+      ReminderPlanner.nextReminder(
+        after: [check], now: waiting, thresholdMinutes: 90,
+        dayStartMinutes: 22 * 60, dayEndMinutes: 6 * 60,
+        calendar: tokyo) == date(2026, 9, 29, 1, calendar: tokyo))
+    #expect(
+      ReminderPlanner.nextReminder(
+        after: [check], now: date(2026, 9, 29, 1, 1, calendar: tokyo),
+        thresholdMinutes: 90, dayStartMinutes: 22 * 60,
+        dayEndMinutes: 6 * 60, calendar: tokyo) == nil)
     let late = InteractionHistory.Check(
       timestamp: date(2026, 9, 29, 5, 30, calendar: tokyo).timeIntervalSince1970,
       source: "app")
-    #expect(ReminderPlanner.nextReminder(
-      after: [late], now: date(2026, 9, 29, 5, 40, calendar: tokyo),
-      thresholdMinutes: 90, dayStartMinutes: 22 * 60,
-      dayEndMinutes: 6 * 60, calendar: tokyo) == nil)
+    #expect(
+      ReminderPlanner.nextReminder(
+        after: [late], now: date(2026, 9, 29, 5, 40, calendar: tokyo),
+        thresholdMinutes: 90, dayStartMinutes: 22 * 60,
+        dayEndMinutes: 6 * 60, calendar: tokyo) == nil)
   }
 
   @Test func eventSelectionDeduplicatesSources() {
@@ -183,11 +193,13 @@ struct IOSContractTests {
     #expect(leadIn?.start == day.start)
     #expect(leadIn?.end == eventStart)
     #expect(leadIn?.elapsed == 0.5)
-    #expect(TimedEvents.leadIn(
-      to: date(2026, 9, 28, 19, calendar: tokyo),
-      at: now, wakingDay: day) == nil)
-    #expect(TimedEvents.leadIn(
-      to: date(2026, 9, 29, 1, calendar: tokyo),
-      at: now, wakingDay: day) == nil)
+    #expect(
+      TimedEvents.leadIn(
+        to: date(2026, 9, 28, 19, calendar: tokyo),
+        at: now, wakingDay: day) == nil)
+    #expect(
+      TimedEvents.leadIn(
+        to: date(2026, 9, 29, 1, calendar: tokyo),
+        at: now, wakingDay: day) == nil)
   }
 }

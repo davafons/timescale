@@ -54,9 +54,11 @@ final class HEYCalendarProvider: ObservableObject {
     lastRefreshAttempt = date
 
     Task { [weak self] in
-      let cliEnabled = UserDefaults.standard.object(forKey: SettingsKey.enableHEYCLI)
+      let cliEnabled =
+        UserDefaults.standard.object(forKey: SettingsKey.enableHEYCLI)
         as? Bool ?? true
-      let outcome = cliEnabled
+      let outcome =
+        cliEnabled
         ? await Task.detached(priority: .utility) { Self.fetchEvents(at: date) }.value
         : HEYCalendarFetchOutcome(events: [], isAvailable: true)
       guard let self else { return }
@@ -64,7 +66,8 @@ final class HEYCalendarProvider: ObservableObject {
       let appleEvents = fetchAppleEvents(at: date)
       cliUnavailable = cliEnabled && !outcome.isAvailable
       calendarAccessDenied = EKEventStore.authorizationStatus(for: .event) == .denied
-      isAvailable = outcome.isAvailable
+      isAvailable =
+        outcome.isAvailable
         || EKEventStore.authorizationStatus(for: .event) == .fullAccess
       cachedEvents = Self.deduplicate(outcome.events + appleEvents)
       updateCurrentEvent(at: Date())

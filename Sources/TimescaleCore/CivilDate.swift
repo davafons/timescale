@@ -11,8 +11,10 @@ public struct CivilDate: Codable, Equatable, Sendable {
   public init?(year: Int, month: Int, day: Int) {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    guard let date = calendar.date(from: DateComponents(
-      year: year, month: month, day: day, hour: 12)),
+    guard
+      let date = calendar.date(
+        from: DateComponents(
+          year: year, month: month, day: day, hour: 12)),
       calendar.dateComponents([.year, .month, .day], from: date)
         == DateComponents(year: year, month: month, day: day)
     else { return nil }
@@ -45,8 +47,10 @@ public struct CivilDate: Codable, Equatable, Sendable {
   public func date(timeZone: TimeZone = .autoupdatingCurrent) -> Date? {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = timeZone
-    guard let noon = calendar.date(from: DateComponents(
-      year: year, month: month, day: day, hour: 12))
+    guard
+      let noon = calendar.date(
+        from: DateComponents(
+          year: year, month: month, day: day, hour: 12))
     else { return nil }
     return calendar.startOfDay(for: noon)
   }

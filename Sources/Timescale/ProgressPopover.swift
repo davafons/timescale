@@ -148,16 +148,20 @@ struct ProgressPopover: View {
             calendarEventRow(event, at: context.date, upcomingProgress: progress)
           }
           if calendarProvider.cliUnavailable {
-            Label("HEY CLI events are unavailable. Apple Calendar events can still appear.",
-              systemImage: "exclamationmark.triangle")
-              .font(TypographyScale.detail)
-              .foregroundStyle(.secondary)
+            Label(
+              "HEY CLI events are unavailable. Apple Calendar events can still appear.",
+              systemImage: "exclamationmark.triangle"
+            )
+            .font(TypographyScale.detail)
+            .foregroundStyle(.secondary)
           }
           if calendarProvider.calendarAccessDenied {
-            Label("Apple Calendar access is denied. Change access in System Settings.",
-              systemImage: "calendar.badge.exclamationmark")
-              .font(TypographyScale.detail)
-              .foregroundStyle(.secondary)
+            Label(
+              "Apple Calendar access is denied. Change access in System Settings.",
+              systemImage: "calendar.badge.exclamationmark"
+            )
+            .font(TypographyScale.detail)
+            .foregroundStyle(.secondary)
           }
         }
 
@@ -842,7 +846,9 @@ private struct CalendarEventDetail: View {
         Button("Done") { dismiss() }
       }
       LabeledContent("When") {
-        Text("\(event.start.formatted(date: .abbreviated, time: .shortened)) – \(event.end.formatted(date: .abbreviated, time: .shortened))")
+        Text(
+          "\(event.start.formatted(date: .abbreviated, time: .shortened)) – \(event.end.formatted(date: .abbreviated, time: .shortened))"
+        )
       }
       LabeledContent("Calendar", value: event.source)
       if let description = event.description, !description.isEmpty {

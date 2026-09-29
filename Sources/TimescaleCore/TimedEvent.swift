@@ -55,7 +55,8 @@ public enum TimedEvents {
 
   public static func deduplicated(_ events: [TimedEvent]) -> [TimedEvent] {
     var kept: [TimedEvent] = []
-    let sorted = events
+    let sorted =
+      events
       .filter { $0.end > $0.start }
       .sorted {
         if $0.start != $1.start { return $0.start < $1.start }
@@ -63,9 +64,10 @@ public enum TimedEvents {
       }
     for event in sorted {
       let duplicate = kept.contains { existing in
-        guard existing.title.trimmingCharacters(in: .whitespacesAndNewlines)
-          .localizedCaseInsensitiveCompare(
-            event.title.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame,
+        guard
+          existing.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveCompare(
+              event.title.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame,
           abs(existing.start.timeIntervalSince(event.start)) < 1,
           abs(existing.end.timeIntervalSince(event.end)) < 1
         else { return false }
@@ -74,7 +76,9 @@ public enum TimedEvents {
         }
         if existing.sourceIdentifier == event.sourceIdentifier,
           existing.id == event.id
-        { return true }
+        {
+          return true
+        }
         let firstIsCLI = existing.sourceIdentifier == "hey-cli"
         let secondIsCLI = event.sourceIdentifier == "hey-cli"
         let firstIsEventKit = existing.sourceIdentifier?.hasPrefix("eventkit:") == true
