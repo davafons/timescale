@@ -42,14 +42,18 @@ struct WidgetEntry: TimelineEntry {
 }
 
 private enum WidgetEntries {
-  static func timeline(settings: IOSSettings, period: SharedPeriod?) -> Timeline<WidgetEntry> {
+  static func timeline(
+    settings: IOSSettings, period: SharedPeriod?, intervalMinutes: Int = 15
+  ) -> Timeline<WidgetEntry> {
     let now = Date.now
     let horizon = now.addingTimeInterval(2 * 60 * 60)
     let cached = IOSStore.loadEvents()
     let calendarAccessDenied = IOSStore.calendarAccessDenied
     let missingCalendarCount = IOSStore.missingCalendarCount
     let checks = IOSStore.loadChecks()
-    let regular = (0...8).map { now.addingTimeInterval(Double($0 * 15 * 60)) }
+    let regular = (0...(120 / intervalMinutes)).map {
+      now.addingTimeInterval(Double($0 * intervalMinutes * 60))
+    }
     let periods = period.map { [$0] } ?? settings.visible
     let periodBoundaries = periods.flatMap { source -> [Date] in
       guard let snapshot = settings.snapshot(for: source, at: now) else { return [] }
@@ -77,10 +81,13 @@ struct PeriodProvider: AppIntentTimelineProvider {
   }
 
   func snapshot(for configuration: PeriodWidgetIntent, in context: Context) async -> WidgetEntry {
-    WidgetEntry(date: .now, settings: IOSStore.loadSettings(), period: (configuration.period ?? .day).shared)
+    WidgetEntry(
+      date: .now, settings: IOSStore.loadSettings(), period: (configuration.period ?? .day).shared)
   }
 
-  func timeline(for configuration: PeriodWidgetIntent, in context: Context) async -> Timeline<WidgetEntry> {
+  func timeline(for configuration: PeriodWidgetIntent, in context: Context) async -> Timeline<
+    WidgetEntry
+  > {
     let settings = IOSStore.loadSettings()
     return WidgetEntries.timeline(
       settings: settings, period: (configuration.period ?? .day).shared)
@@ -93,11 +100,14 @@ struct NumberProvider: AppIntentTimelineProvider {
   }
 
   func snapshot(for configuration: NumberWidgetIntent, in context: Context) async -> WidgetEntry {
-    WidgetEntry(date: .now, settings: IOSStore.loadSettings(),
+    WidgetEntry(
+      date: .now, settings: IOSStore.loadSettings(),
       period: (configuration.period ?? .year).shared)
   }
 
-  func timeline(for configuration: NumberWidgetIntent, in context: Context) async -> Timeline<WidgetEntry> {
+  func timeline(for configuration: NumberWidgetIntent, in context: Context) async -> Timeline<
+    WidgetEntry
+  > {
     let settings = IOSStore.loadSettings()
     return WidgetEntries.timeline(
       settings: settings, period: (configuration.period ?? .year).shared)
@@ -149,7 +159,8 @@ private struct PeriodWidgetView: View {
         periodContent(snapshot)
           .accessibilityElement(children: .ignore)
           .accessibilityLabel(
-            "\(snapshot.period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))), from \(snapshot.start.formatted()), to \(snapshot.end.formatted()), as of \(entry.date.formatted(date: .abbreviated, time: .shortened))")
+            "\(snapshot.period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))), from \(snapshot.start.formatted()), to \(snapshot.end.formatted()), as of \(entry.date.formatted(date: .abbreviated, time: .shortened))"
+          )
       } else {
         Label("Set up Life in Timescale", systemImage: "heart")
           .font(.caption)
@@ -165,8 +176,10 @@ private struct PeriodWidgetView: View {
     let value = snapshot.displayedFraction.formatted(
       .percent.precision(.fractionLength(entry.settings.precision)))
     if family == .accessoryInline {
-      Text("\(snapshot.period.title) \(value) \(entry.settings.showRemaining ? "left" : "elapsed") · \(entry.date, style: .relative)")
-        .font(.caption)
+      Text(
+        "\(snapshot.period.title) \(value) \(entry.settings.showRemaining ? "left" : "elapsed") · \(entry.date, style: .relative)"
+      )
+      .font(.caption)
     } else if family == .accessoryCircular {
       if style == .number {
         VStack(spacing: 0) {
@@ -230,15 +243,19 @@ private struct PeriodWidgetView: View {
           HStack {
             Text(period.title)
             Spacer()
-            Text(snapshot.displayedFraction, format: .percent.precision(
-              .fractionLength(entry.settings.precision)))
-              .monospacedDigit()
-              .foregroundStyle(tint)
+            Text(
+              snapshot.displayedFraction,
+              format: .percent.precision(
+                .fractionLength(entry.settings.precision))
+            )
+            .monospacedDigit()
+            .foregroundStyle(tint)
           }
           .font(.caption)
           .accessibilityElement(children: .ignore)
           .accessibilityLabel(
-            "\(period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))), from \(snapshot.start.formatted()), to \(snapshot.end.formatted())")
+            "\(period.title), \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))), from \(snapshot.start.formatted()), to \(snapshot.end.formatted())"
+          )
         }
       }
       if periods.count > limit {
@@ -251,6 +268,108 @@ private struct PeriodWidgetView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+private struct StandByDayProvider: TimelineProvider {
+  func placeholder(in context: Context) -> WidgetEntry {
+    WidgetEntry(date: .now, settings: IOSSettings(), period: .day)
+  }
+
+  func getSnapshot(in context: Context, completion: @escaping (WidgetEntry) -> Void) {
+    completion(WidgetEntry(date: .now, settings: IOSStore.loadSettings(), period: .day))
+  }
+
+  func getTimeline(in context: Context, completion: @escaping (Timeline<WidgetEntry>) -> Void) {
+    completion(
+      WidgetEntries.timeline(
+        settings: IOSStore.loadSettings(), period: .day, intervalMinutes: 5))
+  }
+}
+
+private struct StandByDayView: View {
+  let entry: WidgetEntry
+  @Environment(\.widgetRenderingMode) private var renderingMode
+
+  private var tint: Color {
+    renderingMode == .fullColor ? entry.settings.widgetTint : .primary
+  }
+
+  var body: some View {
+    if let snapshot = entry.snapshot {
+      VStack(alignment: .leading, spacing: 6) {
+        Text(entry.settings.showRemaining ? "DAY REMAINING" : "DAY ELAPSED")
+          .font(.caption.weight(.semibold))
+          .tracking(1)
+          .foregroundStyle(.secondary)
+
+        Text(
+          snapshot.displayedFraction,
+          format: .percent.precision(
+            .fractionLength(entry.settings.precision))
+        )
+        .font(.system(size: 44, weight: .semibold, design: .rounded))
+        .monospacedDigit()
+        .minimumScaleFactor(0.5)
+        .lineLimit(1)
+        .foregroundStyle(tint)
+        .widgetAccentable()
+
+        GeometryReader { geometry in
+          ZStack(alignment: .leading) {
+            Capsule().fill(.primary.opacity(0.15))
+            Capsule().fill(tint)
+              .frame(width: geometry.size.width * snapshot.displayedFraction)
+              .widgetAccentable()
+          }
+        }
+        .frame(height: 10)
+        .padding(.vertical, 2)
+
+        Text(remainingText(snapshot))
+          .font(.subheadline.weight(.medium))
+          .monospacedDigit()
+          .lineLimit(1)
+          .minimumScaleFactor(0.7)
+
+        HStack {
+          Text(snapshot.start, format: .dateTime.hour().minute())
+          Spacer()
+          Text(snapshot.end, format: .dateTime.hour().minute())
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(
+        "Waking day, \(snapshot.displayedFraction.formatted(.percent.precision(.fractionLength(entry.settings.precision)))) \(entry.settings.showRemaining ? "remaining" : "elapsed"), \(remainingText(snapshot)), from \(snapshot.start.formatted(date: .omitted, time: .shortened)) to \(snapshot.end.formatted(date: .omitted, time: .shortened)), as of \(entry.date.formatted(date: .omitted, time: .shortened))"
+      )
+      .containerBackground(for: .widget) { Color(uiColor: .secondarySystemGroupedBackground) }
+      .widgetURL(URL(string: "timescale://dashboard"))
+    }
+  }
+
+  private func remainingText(_ snapshot: PeriodSnapshot) -> String {
+    if entry.date < snapshot.start {
+      return "Starts \(snapshot.start.formatted(date: .omitted, time: .shortened))"
+    }
+    guard snapshot.remainingDuration > 0 else { return "Day complete" }
+    let minutes = Int(ceil(snapshot.remainingDuration / 60))
+    let hours = minutes / 60
+    return hours > 0 ? "\(hours)h \(minutes % 60)m left" : "\(minutes)m left"
+  }
+}
+
+private struct StandByDayWidget: Widget {
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: "timescale.standby-day", provider: StandByDayProvider()) {
+      StandByDayView(entry: $0)
+    }
+    .configurationDisplayName("StandBy Day")
+    .description("A large day percentage, progress bar, and time left for StandBy.")
+    .supportedFamilies([.systemSmall])
+    .containerBackgroundRemovable(true)
   }
 }
 
@@ -351,7 +470,8 @@ private struct SpecialWidgetView: View {
 
   private var solarToday: SolarEvents? {
     guard let latitude = entry.settings.latitude,
-      let longitude = entry.settings.longitude else { return nil }
+      let longitude = entry.settings.longitude
+    else { return nil }
     return SolarCalculator.events(
       on: entry.date, latitude: latitude, longitude: longitude)
   }
@@ -409,8 +529,10 @@ private struct SpecialWidgetView: View {
       if family != .accessoryRectangular {
         ProgressView(value: snapshot.elapsedFraction)
       }
-      Text("Age \(Calendar.current.dateComponents([.year], from: birthDate, to: entry.date).year ?? 0) · \(entry.settings.country) average \(entry.settings.expectedYears.formatted()) years")
-        .font(.caption2).foregroundStyle(.secondary)
+      Text(
+        "Age \(Calendar.current.dateComponents([.year], from: birthDate, to: entry.date).year ?? 0) · \(entry.settings.country) average \(entry.settings.expectedYears.formatted()) years"
+      )
+      .font(.caption2).foregroundStyle(.secondary)
     } else {
       Text("Life estimate").font(.headline)
       Text("Set your birth date in Timescale")
@@ -458,8 +580,10 @@ private struct SpecialWidgetView: View {
           }
         }
         if entry.missingCalendarCount > 0 && family == .systemLarge {
-          Text("\(entry.missingCalendarCount) selected calendar\(entry.missingCalendarCount == 1 ? "" : "s") unavailable")
-            .font(.caption2).foregroundStyle(.secondary)
+          Text(
+            "\(entry.missingCalendarCount) selected calendar\(entry.missingCalendarCount == 1 ? "" : "s") unavailable"
+          )
+          .font(.caption2).foregroundStyle(.secondary)
         }
       }
     } else {
@@ -594,6 +718,7 @@ private struct AwarenessWidget: Widget {
 
 @main struct TimescaleWidgetBundle: WidgetBundle {
   var body: some Widget {
+    StandByDayWidget()
     BarWidget()
     RingWidget()
     NumberWidget()

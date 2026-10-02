@@ -32,3 +32,11 @@ Use a physical iPhone on iOS 18 or later with a fresh install. Record the device
 - Large text, dark mode, high-contrast simulator screenshot: `artifacts/ios/dashboard-large-dark.png`.
 
 Home and Lock Screen widget captures and the physical-device checks above remain to be recorded.
+
+## StandBy Day widget
+
+1. Update Timescale in TestFlight and open it once. Confirm the waking-day start/end, accent, and elapsed/remaining mode in Settings.
+2. Charge the iPhone, place it sideways, and lock it to enter StandBy. Switch to the widgets view.
+3. Press and hold a widget stack, tap +, find Timescale, and add **StandBy Day**. Disable Smart Rotate on that stack to keep it visible.
+4. Confirm the large percentage and bar match the app's elapsed/remaining mode, the remaining duration is readable, and the start/end times match the configured waking day. Widget updates are scheduled every five minutes; iOS controls actual refresh timing.
+5. Check low-light red rendering and an overnight waking day. After the waking day ends, the widget should show **Day complete** until the next waking day begins.
